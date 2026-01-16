@@ -27,9 +27,87 @@ interface Job {
   created_at: string;
 }
 
+// Helper function to load image and convert to base64
+const loadImageAsBase64 = async (url: string): Promise<string | null> => {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error('Failed to load image:', url, error);
+    return null;
+  }
+};
+
+// Helper to add photos to PDF
+const addPhotosToPDF = async (
+  doc: jsPDF, 
+  photoUrls: string[], 
+  startY: number, 
+  margin: number,
+  pageWidth: number,
+  pageHeight: number
+): Promise<number> => {
+  let yPos = startY;
+  
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Inspection Photos', margin, yPos);
+  yPos += 10;
+
+  const photoWidth = 80;
+  const photoHeight = 60;
+  const photosPerRow = 2;
+  const spacing = 10;
+  
+  let currentX = margin;
+  let photosInRow = 0;
+
+  for (const url of photoUrls) {
+    // Check if we need a new page
+    if (yPos + photoHeight > pageHeight - margin - 20) {
+      doc.addPage();
+      yPos = margin;
+      currentX = margin;
+      photosInRow = 0;
+    }
+
+    try {
+      const base64 = await loadImageAsBase64(url);
+      if (base64) {
+        doc.addImage(base64, 'JPEG', currentX, yPos, photoWidth, photoHeight);
+        
+        photosInRow++;
+        if (photosInRow >= photosPerRow) {
+          yPos += photoHeight + spacing;
+          currentX = margin;
+          photosInRow = 0;
+        } else {
+          currentX += photoWidth + spacing;
+        }
+      }
+    } catch (error) {
+      console.error('Error adding image to PDF:', error);
+    }
+  }
+
+  // If we ended mid-row, move yPos down
+  if (photosInRow > 0) {
+    yPos += photoHeight + spacing;
+  }
+
+  return yPos + 5;
+};
+
 export const generatePDF = async (inspection: Inspection): Promise<void> => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 20;
   let yPos = 20;
 
@@ -113,8 +191,19 @@ export const generatePDF = async (inspection: Inspection): Promise<void> => {
 
   yPos = (doc as any).lastAutoTable.finalY + 15;
 
+  // Photos Section
+  if (inspection.photo_urls && inspection.photo_urls.length > 0) {
+    yPos = await addPhotosToPDF(doc, inspection.photo_urls, yPos, margin, pageWidth, pageHeight);
+  }
+
   // AI Analysis Section
   if (inspection.analysis_report) {
+    // Check if we need a new page
+    if (yPos > pageHeight - 100) {
+      doc.addPage();
+      yPos = margin;
+    }
+
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('AI Analysis & Recommendations', margin, yPos);
@@ -129,7 +218,6 @@ export const generatePDF = async (inspection: Inspection): Promise<void> => {
 
     // Check if we need a new page
     const lineHeight = 5;
-    const pageHeight = doc.internal.pageSize.getHeight();
 
     for (let i = 0; i < lines.length; i++) {
       if (yPos + lineHeight > pageHeight - margin) {
@@ -321,8 +409,19 @@ export const generateJobPDF = async (job: Job, rugs: Inspection[]): Promise<void
 
     yPos = (doc as any).lastAutoTable.finalY + 15;
 
+    // Photos Section for this rug
+    if (rug.photo_urls && rug.photo_urls.length > 0) {
+      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight);
+    }
+
     // AI Analysis
     if (rug.analysis_report) {
+      // Check if we need a new page
+      if (yPos > pageHeight - 80) {
+        doc.addPage();
+        yPos = margin;
+      }
+
       doc.setFontSize(14);
       doc.setFont('helvetica', 'bold');
       doc.text('AI Analysis & Recommendations', margin, yPos);
