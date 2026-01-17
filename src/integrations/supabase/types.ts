@@ -155,6 +155,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          is_additional: boolean
           service_name: string
           unit_price: number
           updated_at: string
@@ -163,6 +164,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          is_additional?: boolean
           service_name: string
           unit_price?: number
           updated_at?: string
@@ -171,6 +173,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          is_additional?: boolean
           service_name?: string
           unit_price?: number
           updated_at?: string

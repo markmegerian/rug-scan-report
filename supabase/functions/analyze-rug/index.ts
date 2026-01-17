@@ -35,17 +35,36 @@ serve(async (req) => {
 
         const { data: prices, error } = await supabase
           .from("service_prices")
-          .select("service_name, unit_price")
+          .select("service_name, unit_price, is_additional")
           .eq("user_id", userId);
 
         if (!error && prices && prices.length > 0) {
-          servicePricesText = "\n\n**Service Pricing (per unit):**\n";
-          prices.forEach((price: { service_name: string; unit_price: number }) => {
+          const baseServices: string[] = [];
+          const additionalServices: string[] = [];
+          
+          prices.forEach((price: { service_name: string; unit_price: number; is_additional: boolean }) => {
             if (price.unit_price > 0) {
-              servicePricesText += `- ${price.service_name}: $${price.unit_price.toFixed(2)}\n`;
+              const priceEntry = `- ${price.service_name}: $${price.unit_price.toFixed(2)}`;
+              if (price.is_additional) {
+                additionalServices.push(priceEntry);
+              } else {
+                baseServices.push(priceEntry);
+              }
             }
           });
-          servicePricesText += "\nUse these prices when calculating cost estimates. If a service is not listed or has a $0 price, use industry standard estimates.";
+          
+          servicePricesText = "\n\n**Service Pricing (per unit):**\n";
+          
+          if (baseServices.length > 0) {
+            servicePricesText += "\n*Base Services:*\n" + baseServices.join("\n") + "\n";
+          }
+          
+          if (additionalServices.length > 0) {
+            servicePricesText += "\n*Additional Services (added to base cost, not replacing it):*\n" + additionalServices.join("\n") + "\n";
+          }
+          
+          servicePricesText += "\n**IMPORTANT:** Services marked as 'Additional' are ADD-ON costs. For example, if a rug needs Standard Wash + Limewash, calculate BOTH costs and add them together. Additional services do NOT replace the base washing service cost - they are charged ON TOP of the base service.\n";
+          servicePricesText += "\nIf a service is not listed or has a $0 price, use industry standard estimates.";
           console.log("Loaded service prices for user:", userId);
         } else {
           console.log("No service prices found for user, using default estimates");
