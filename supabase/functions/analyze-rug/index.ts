@@ -49,7 +49,6 @@ Please examine the attached ${photos.length} photograph(s) and provide:
 6. Recommended timeline for restoration`;
 
     // Use OpenAI Responses API with saved prompt ID
-    // Using o4-mini to support reasoning parameters from saved prompt
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -57,7 +56,7 @@ Please examine the attached ${photos.length} photograph(s) and provide:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "o4-mini",
+        model: "gpt-5",
         prompt: {
           id: PROMPT_ID,
         },
