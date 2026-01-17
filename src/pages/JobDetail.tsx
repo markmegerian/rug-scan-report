@@ -20,6 +20,7 @@ import RugForm from '@/components/RugForm';
 import JobForm from '@/components/JobForm';
 import EditRugDialog from '@/components/EditRugDialog';
 import AnalysisReport from '@/components/AnalysisReport';
+import EmailPreviewDialog from '@/components/EmailPreviewDialog';
 
 interface Job {
   id: string;
@@ -69,6 +70,7 @@ const JobDetail = () => {
   const [showReport, setShowReport] = useState(false);
   const [branding, setBranding] = useState<BusinessBranding | null>(null);
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -432,7 +434,7 @@ const JobDetail = () => {
     }
   };
 
-  const handleSendEmail = async () => {
+  const handleOpenEmailPreview = () => {
     if (!job || rugs.length === 0) {
       toast.error('No rugs to include in the report');
       return;
@@ -449,11 +451,18 @@ const JobDetail = () => {
       return;
     }
 
+    setShowEmailPreview(true);
+  };
+
+  const handleSendEmail = async (subject: string, message: string) => {
+    if (!job || !job.client_email) return;
+
+    const analyzedRugs = rugs.filter(r => r.analysis_report);
+    
     setSendingEmail(true);
     try {
       toast.info('Generating PDF report...');
       
-      // Generate PDF as base64 for email attachment
       const rugsWithClient = analyzedRugs.map(rug => ({
         ...rug,
         client_name: job.client_name,
@@ -478,6 +487,8 @@ const JobDetail = () => {
           jobNumber: job.job_number,
           rugDetails,
           pdfBase64,
+          subject,
+          customMessage: message,
           businessName: branding?.business_name,
           businessEmail: branding?.business_email,
           businessPhone: branding?.business_phone,
@@ -488,6 +499,7 @@ const JobDetail = () => {
       if (data.error) throw new Error(data.error);
 
       toast.success(`Report sent to ${job.client_email}!`);
+      setShowEmailPreview(false);
     } catch (error) {
       console.error('Email send error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to send email');
@@ -730,20 +742,11 @@ const JobDetail = () => {
                       <Button 
                         variant="outline" 
                         className="gap-2"
-                        onClick={handleSendEmail}
+                        onClick={handleOpenEmailPreview}
                         disabled={sendingEmail}
                       >
-                        {sendingEmail ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Sending...
-                          </>
-                        ) : (
-                          <>
-                            <Mail className="h-4 w-4" />
-                            Email Report
-                          </>
-                        )}
+                        <Mail className="h-4 w-4" />
+                        Email Report
                       </Button>
                     )}
                   </>
@@ -883,6 +886,25 @@ const JobDetail = () => {
         onSave={handleEditRug}
         isLoading={savingRug}
       />
+
+      {/* Email Preview Dialog */}
+      {job.client_email && (
+        <EmailPreviewDialog
+          open={showEmailPreview}
+          onOpenChange={setShowEmailPreview}
+          onSend={handleSendEmail}
+          clientName={job.client_name}
+          clientEmail={job.client_email}
+          jobNumber={job.job_number}
+          rugDetails={rugs.filter(r => r.analysis_report).map(rug => ({
+            rugNumber: rug.rug_number,
+            rugType: rug.rug_type,
+            dimensions: rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : '—',
+          }))}
+          businessName={branding?.business_name || undefined}
+          isSending={sendingEmail}
+        />
+      )}
     </div>
   );
 };

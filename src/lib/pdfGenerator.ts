@@ -35,6 +35,20 @@ export interface BusinessBranding {
   logo_url: string | null;
 }
 
+// Color palette
+const COLORS = {
+  primary: [30, 64, 175] as [number, number, number],     // Deep blue
+  primaryLight: [59, 130, 246] as [number, number, number], // Light blue
+  secondary: [100, 116, 139] as [number, number, number],  // Slate
+  accent: [245, 158, 11] as [number, number, number],      // Amber
+  text: [15, 23, 42] as [number, number, number],          // Slate 900
+  textMuted: [100, 116, 139] as [number, number, number],  // Slate 500
+  border: [226, 232, 240] as [number, number, number],     // Slate 200
+  background: [248, 250, 252] as [number, number, number], // Slate 50
+  white: [255, 255, 255] as [number, number, number],
+  success: [34, 197, 94] as [number, number, number],      // Green
+};
+
 // Default RugBoost logo as base64 PNG (fallback when no custom logo)
 const RUGBOOST_LOGO_BASE64 = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MDAgODkwIiBmaWxsPSJub25lIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ3JhZCIgeDE9IjAlIiB5MT0iMjAlIiB4Mj0iMTAwJSIgeTI9IjgwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMyMTc0QzYiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjNkU1NEQxIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8cGF0aCBkPSJNMTIwIDQ0NUMxMjAgMzY4IDI2My41NyAyNDMuNTcgMzAwIDE2MCAzNTQuMjMgMjIzLjkgNDc0IDM2MiA0ODAgNDQ1IDQ4MCA1MjAgNDIwIDY5MCAzMDAgNjkwIDE4MCA2OTAgMTIwIDUyMCAxMjAgNDQ1WiIgZmlsbD0idXJsKCNncmFkKSIvPgogIDxwYXRoIGQ9Ik0yMDAgNDYwQzIwMCAzNjAgMzQwIDMwMCAzMDAgMjIwIDI2MCAzMDAgNDAwIDM2MCA0MDAgNDYwIDQwMCA1NjAgMzIwIDYyMCAzMDAgNjIwIDI4MCA2MjAgMjAwIDU2MCAyMDAgNDYwWiIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iMC4zIi8+Cjwvc3ZnPg==`;
 
@@ -55,123 +69,331 @@ const loadImageAsBase64 = async (url: string): Promise<string | null> => {
   }
 };
 
-// Helper function to add logo header to a page
-const addLogoHeader = async (
+// Draw a rounded rectangle
+const drawRoundedRect = (
   doc: jsPDF,
-  pageWidth: number,
-  branding?: BusinessBranding | null
-): Promise<number> => {
-  const logoWidth = 20;
-  const logoHeight = 30;
-  const logoX = 15;
-  const logoY = 8;
-
-  // Determine which logo and name to use
-  const businessName = branding?.business_name || 'RugBoost';
-  let logoBase64 = RUGBOOST_LOGO_BASE64;
-
-  // Try to load custom logo if available
-  if (branding?.logo_url) {
-    const customLogo = await loadImageAsBase64(branding.logo_url);
-    if (customLogo) {
-      logoBase64 = customLogo;
-    }
-  }
-
-  try {
-    // Determine image format from base64 data
-    const format = logoBase64.includes('image/png')
-      ? 'PNG'
-      : logoBase64.includes('image/svg')
-      ? 'SVG'
-      : 'JPEG';
-    doc.addImage(logoBase64, format, logoX, logoY, logoWidth, logoHeight);
-  } catch (error) {
-    console.error('Failed to add logo to PDF:', error);
-  }
-
-  // Add company name next to logo
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(33, 116, 198); // Primary blue
-  doc.text(businessName, logoX + logoWidth + 5, logoY + 12);
-
-  // Add business contact info if available
-  let contactY = logoY + 18;
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 100, 100);
-
-  if (branding?.business_phone) {
-    doc.text(branding.business_phone, logoX + logoWidth + 5, contactY);
-    contactY += 4;
-  }
-  if (branding?.business_email) {
-    doc.text(branding.business_email, logoX + logoWidth + 5, contactY);
-  }
-
-  // Reset text color
-  doc.setTextColor(0, 0, 0);
-
-  // Draw a subtle line under the header
-  doc.setDrawColor(33, 116, 198);
-  doc.setLineWidth(0.5);
-  doc.line(15, logoY + logoHeight + 5, pageWidth - 15, logoY + logoHeight + 5);
-
-  // Return the Y position after header
-  return logoY + logoHeight + 15;
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+  fill: boolean = true,
+  stroke: boolean = false
+) => {
+  doc.roundedRect(x, y, width, height, radius, radius, fill ? 'F' : stroke ? 'S' : '');
 };
 
-// Sync version for pages after first (uses cached logo)
-const addLogoHeaderSync = (
+// Professional header with logo
+const addProfessionalHeader = async (
+  doc: jsPDF,
+  pageWidth: number,
+  branding?: BusinessBranding | null,
+  cachedLogoBase64?: string | null
+): Promise<{ yPos: number; logoBase64: string | null }> => {
+  const margin = 15;
+  const headerHeight = 45;
+  
+  // Header background
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 0, pageWidth, headerHeight, 'F');
+  
+  // Add subtle gradient effect with lighter strip
+  doc.setFillColor(...COLORS.primaryLight);
+  doc.rect(0, headerHeight - 3, pageWidth, 3, 'F');
+  
+  const businessName = branding?.business_name || 'RugBoost';
+  let logoBase64 = cachedLogoBase64;
+  
+  if (!logoBase64 && branding?.logo_url) {
+    logoBase64 = await loadImageAsBase64(branding.logo_url);
+  }
+  if (!logoBase64) {
+    logoBase64 = RUGBOOST_LOGO_BASE64;
+  }
+  
+  // Logo
+  const logoSize = 25;
+  const logoX = margin;
+  const logoY = (headerHeight - logoSize) / 2;
+  
+  try {
+    const format = logoBase64.includes('image/png') ? 'PNG' : 
+                   logoBase64.includes('image/svg') ? 'SVG' : 'JPEG';
+    
+    // White background circle for logo
+    doc.setFillColor(...COLORS.white);
+    doc.circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2 + 2, 'F');
+    
+    doc.addImage(logoBase64, format, logoX, logoY, logoSize, logoSize);
+  } catch (error) {
+    console.error('Failed to add logo:', error);
+  }
+  
+  // Company name
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.white);
+  doc.text(businessName, logoX + logoSize + 10, headerHeight / 2 + 2);
+  
+  // Contact info on right side
+  const rightX = pageWidth - margin;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  
+  let infoY = 15;
+  if (branding?.business_phone) {
+    doc.text(branding.business_phone, rightX, infoY, { align: 'right' });
+    infoY += 5;
+  }
+  if (branding?.business_email) {
+    doc.text(branding.business_email, rightX, infoY, { align: 'right' });
+    infoY += 5;
+  }
+  if (branding?.business_address) {
+    const addressLines = doc.splitTextToSize(branding.business_address, 60);
+    addressLines.forEach((line: string) => {
+      doc.text(line, rightX, infoY, { align: 'right' });
+      infoY += 4;
+    });
+  }
+  
+  return { yPos: headerHeight + 15, logoBase64 };
+};
+
+// Sync version for subsequent pages
+const addProfessionalHeaderSync = (
   doc: jsPDF,
   pageWidth: number,
   branding?: BusinessBranding | null,
   cachedLogoBase64?: string | null
 ): number => {
-  const logoWidth = 20;
-  const logoHeight = 30;
-  const logoX = 15;
-  const logoY = 8;
-
+  const margin = 15;
+  const headerHeight = 35;
+  
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 0, pageWidth, headerHeight, 'F');
+  
+  doc.setFillColor(...COLORS.primaryLight);
+  doc.rect(0, headerHeight - 2, pageWidth, 2, 'F');
+  
   const businessName = branding?.business_name || 'RugBoost';
   const logoBase64 = cachedLogoBase64 || RUGBOOST_LOGO_BASE64;
-
+  
+  const logoSize = 20;
+  const logoX = margin;
+  const logoY = (headerHeight - logoSize) / 2;
+  
   try {
-    const format = logoBase64.includes('image/png')
-      ? 'PNG'
-      : logoBase64.includes('image/svg')
-      ? 'SVG'
-      : 'JPEG';
-    doc.addImage(logoBase64, format, logoX, logoY, logoWidth, logoHeight);
+    const format = logoBase64.includes('image/png') ? 'PNG' : 
+                   logoBase64.includes('image/svg') ? 'SVG' : 'JPEG';
+    doc.setFillColor(...COLORS.white);
+    doc.circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2 + 1, 'F');
+    doc.addImage(logoBase64, format, logoX, logoY, logoSize, logoSize);
   } catch (error) {
-    console.error('Failed to add logo to PDF:', error);
+    console.error('Failed to add logo:', error);
   }
+  
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.white);
+  doc.text(businessName, logoX + logoSize + 8, headerHeight / 2 + 2);
+  
+  return headerHeight + 10;
+};
 
+// Section header with accent bar
+const addSectionHeader = (
+  doc: jsPDF,
+  title: string,
+  yPos: number,
+  margin: number
+): number => {
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(margin, yPos, 4, 8, 'F');
+  
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(33, 116, 198);
-  doc.text(businessName, logoX + logoWidth + 5, logoY + 12);
+  doc.setTextColor(...COLORS.text);
+  doc.text(title, margin + 8, yPos + 6);
+  
+  return yPos + 14;
+};
 
-  let contactY = logoY + 18;
+// Info card with background
+const addInfoCard = (
+  doc: jsPDF,
+  data: [string, string][],
+  yPos: number,
+  margin: number,
+  width: number
+): number => {
+  doc.setFillColor(...COLORS.background);
+  const cardHeight = data.length * 8 + 10;
+  drawRoundedRect(doc, margin, yPos, width, cardHeight, 3);
+  
+  let innerY = yPos + 8;
+  data.forEach(([label, value]) => {
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.textMuted);
+    doc.text(label.toUpperCase(), margin + 8, innerY);
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...COLORS.text);
+    doc.text(value || '—', margin + 50, innerY);
+    
+    innerY += 8;
+  });
+  
+  return yPos + cardHeight + 8;
+};
+
+// Professional footer
+const addProfessionalFooter = (
+  doc: jsPDF,
+  pageWidth: number,
+  pageHeight: number,
+  pageNum: number,
+  totalPages: number,
+  businessName: string,
+  jobNumber?: string
+) => {
+  const footerY = pageHeight - 15;
+  const margin = 15;
+  
+  // Footer line
+  doc.setDrawColor(...COLORS.border);
+  doc.setLineWidth(0.5);
+  doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
+  
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 100, 100);
-
-  if (branding?.business_phone) {
-    doc.text(branding.business_phone, logoX + logoWidth + 5, contactY);
-    contactY += 4;
+  doc.setTextColor(...COLORS.textMuted);
+  
+  // Left: Company name
+  doc.text(`Generated by ${businessName}`, margin, footerY);
+  
+  // Center: Page number
+  doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth / 2, footerY, { align: 'center' });
+  
+  // Right: Job number or date
+  if (jobNumber) {
+    doc.text(`Job #${jobNumber}`, pageWidth - margin, footerY, { align: 'right' });
+  } else {
+    doc.text(format(new Date(), 'MMM d, yyyy'), pageWidth - margin, footerY, { align: 'right' });
   }
-  if (branding?.business_email) {
-    doc.text(branding.business_email, logoX + logoWidth + 5, contactY);
+};
+
+// Format analysis report with proper sections
+const addFormattedAnalysis = (
+  doc: jsPDF,
+  analysis: string,
+  startY: number,
+  margin: number,
+  pageWidth: number,
+  pageHeight: number,
+  branding?: BusinessBranding | null,
+  cachedLogoBase64?: string | null
+): number => {
+  let yPos = startY;
+  const maxWidth = pageWidth - margin * 2 - 10;
+  
+  // Parse analysis into sections
+  const lines = analysis.split('\n');
+  let currentSection = '';
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) {
+      yPos += 3;
+      continue;
+    }
+    
+    // Check for page break
+    if (yPos > pageHeight - 40) {
+      doc.addPage();
+      yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+    }
+    
+    // Check if this is a section header (starts with ** or ###)
+    const isHeader = trimmedLine.startsWith('**') || trimmedLine.startsWith('###') || trimmedLine.startsWith('##');
+    const isBullet = trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*');
+    const isNumbered = /^\d+\./.test(trimmedLine);
+    
+    if (isHeader) {
+      // Clean the header text
+      const headerText = trimmedLine.replace(/[#*]/g, '').trim();
+      
+      yPos += 4;
+      
+      // Section header with colored background
+      doc.setFillColor(...COLORS.background);
+      doc.rect(margin, yPos - 4, pageWidth - margin * 2, 10, 'F');
+      
+      doc.setFillColor(...COLORS.primary);
+      doc.rect(margin, yPos - 4, 3, 10, 'F');
+      
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...COLORS.primary);
+      doc.text(headerText, margin + 6, yPos + 2);
+      
+      yPos += 12;
+      currentSection = headerText;
+    } else if (isBullet || isNumbered) {
+      // Bullet or numbered item
+      const bulletText = trimmedLine.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
+      const wrappedLines = doc.splitTextToSize(bulletText, maxWidth - 10);
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.text);
+      
+      // Draw bullet point
+      if (isBullet) {
+        doc.setFillColor(...COLORS.primary);
+        doc.circle(margin + 5, yPos - 1, 1.5, 'F');
+      } else {
+        const num = trimmedLine.match(/^(\d+)\./)?.[1] || '';
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...COLORS.primary);
+        doc.text(num + '.', margin + 2, yPos);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...COLORS.text);
+      }
+      
+      wrappedLines.forEach((wLine: string, idx: number) => {
+        if (yPos > pageHeight - 30) {
+          doc.addPage();
+          yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+        }
+        doc.text(wLine, margin + 12, yPos);
+        yPos += 5;
+      });
+      
+      yPos += 1;
+    } else {
+      // Regular paragraph text
+      const wrappedLines = doc.splitTextToSize(trimmedLine, maxWidth);
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.text);
+      
+      wrappedLines.forEach((wLine: string) => {
+        if (yPos > pageHeight - 30) {
+          doc.addPage();
+          yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+        }
+        doc.text(wLine, margin + 2, yPos);
+        yPos += 5;
+      });
+      
+      yPos += 2;
+    }
   }
-
-  doc.setTextColor(0, 0, 0);
-  doc.setDrawColor(33, 116, 198);
-  doc.setLineWidth(0.5);
-  doc.line(15, logoY + logoHeight + 5, pageWidth - 15, logoY + logoHeight + 5);
-
-  return logoY + logoHeight + 15;
+  
+  return yPos;
 };
 
 // Helper to add photos to PDF
@@ -181,36 +403,41 @@ const addPhotosToPDF = async (
   startY: number,
   margin: number,
   pageWidth: number,
-  pageHeight: number
+  pageHeight: number,
+  branding?: BusinessBranding | null,
+  cachedLogoBase64?: string | null
 ): Promise<number> => {
   let yPos = startY;
-
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Inspection Photos', margin, yPos);
-  yPos += 10;
-
-  const photoWidth = 80;
-  const photoHeight = 60;
+  
+  yPos = addSectionHeader(doc, 'Inspection Photos', yPos, margin);
+  yPos += 5;
+  
+  const photoWidth = 85;
+  const photoHeight = 65;
   const photosPerRow = 2;
   const spacing = 10;
-
+  
   let currentX = margin;
   let photosInRow = 0;
-
+  
   for (const url of photoUrls) {
-    if (yPos + photoHeight > pageHeight - margin - 20) {
+    if (yPos + photoHeight > pageHeight - 30) {
       doc.addPage();
-      yPos = margin;
+      yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
       currentX = margin;
       photosInRow = 0;
     }
-
+    
     try {
       const base64 = await loadImageAsBase64(url);
       if (base64) {
+        // Photo frame
+        doc.setDrawColor(...COLORS.border);
+        doc.setLineWidth(0.5);
+        doc.rect(currentX - 1, yPos - 1, photoWidth + 2, photoHeight + 2);
+        
         doc.addImage(base64, 'JPEG', currentX, yPos, photoWidth, photoHeight);
-
+        
         photosInRow++;
         if (photosInRow >= photosPerRow) {
           yPos += photoHeight + spacing;
@@ -224,12 +451,12 @@ const addPhotosToPDF = async (
       console.error('Error adding image to PDF:', error);
     }
   }
-
+  
   if (photosInRow > 0) {
     yPos += photoHeight + spacing;
   }
-
-  return yPos + 5;
+  
+  return yPos;
 };
 
 export const generatePDF = async (
@@ -239,156 +466,113 @@ export const generatePDF = async (
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
-
-  // Cache logo for subsequent pages
-  let cachedLogoBase64: string | null = null;
-  if (branding?.logo_url) {
-    cachedLogoBase64 = await loadImageAsBase64(branding.logo_url);
-  }
-
-  // Add logo header
-  let yPos = await addLogoHeader(doc, pageWidth, branding);
-  yPos += 5;
-
-  // Title
+  const margin = 15;
+  
+  // Add header
+  const { yPos: headerEndY, logoBase64: cachedLogoBase64 } = await addProfessionalHeader(doc, pageWidth, branding);
+  let yPos = headerEndY;
+  
+  // Title section
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.text);
   doc.text('Rug Inspection Report', pageWidth / 2, yPos, { align: 'center' });
-  yPos += 15;
-
-  // Date
+  yPos += 10;
+  
+  // Date badge
+  doc.setFillColor(...COLORS.background);
+  const dateText = format(new Date(inspection.created_at), 'MMMM d, yyyy');
+  const dateWidth = doc.getTextWidth(dateText) + 20;
+  drawRoundedRect(doc, (pageWidth - dateWidth) / 2, yPos - 4, dateWidth, 10, 2);
+  
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(
-    `Report Date: ${format(new Date(inspection.created_at), 'MMMM d, yyyy')}`,
-    pageWidth / 2,
-    yPos,
-    { align: 'center' }
-  );
-  yPos += 15;
-
-  // Client Information Section
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Client Information', margin, yPos);
-  yPos += 8;
-
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-
-  const clientInfo = [
+  doc.setTextColor(...COLORS.textMuted);
+  doc.text(dateText, pageWidth / 2, yPos + 2, { align: 'center' });
+  yPos += 18;
+  
+  // Two column layout for info cards
+  const cardWidth = (pageWidth - margin * 2 - 10) / 2;
+  
+  // Client Information
+  yPos = addSectionHeader(doc, 'Client Information', yPos, margin);
+  yPos = addInfoCard(doc, [
     ['Name', inspection.client_name],
-    ['Email', inspection.client_email || 'N/A'],
-    ['Phone', inspection.client_phone || 'N/A'],
-  ];
-
-  autoTable(doc, {
-    startY: yPos,
-    head: [],
-    body: clientInfo,
-    theme: 'plain',
-    styles: { fontSize: 10 },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 40 },
-      1: { cellWidth: 'auto' },
-    },
-    margin: { left: margin },
-  });
-
-  yPos = (doc as any).lastAutoTable.finalY + 15;
-
-  // Rug Details Section
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Rug Details', margin, yPos);
-  yPos += 8;
-
-  const rugDetails = [
-    ['Rug Number', inspection.rug_number],
+    ['Email', inspection.client_email || '—'],
+    ['Phone', inspection.client_phone || '—'],
+  ], yPos, margin, cardWidth);
+  
+  // Rug Details (positioned next to client info on same row)
+  const rugYStart = yPos - (3 * 8 + 10 + 8 + 14);
+  addSectionHeader(doc, 'Rug Details', rugYStart, margin + cardWidth + 10);
+  addInfoCard(doc, [
+    ['Rug #', inspection.rug_number],
     ['Type', inspection.rug_type],
-    [
-      'Dimensions',
-      inspection.length && inspection.width
-        ? `${inspection.length}' × ${inspection.width}'`
-        : 'N/A',
-    ],
-    ['Notes', inspection.notes || 'N/A'],
-  ];
-
-  autoTable(doc, {
-    startY: yPos,
-    head: [],
-    body: rugDetails,
-    theme: 'plain',
-    styles: { fontSize: 10 },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 40 },
-      1: { cellWidth: 'auto' },
-    },
-    margin: { left: margin },
-  });
-
-  yPos = (doc as any).lastAutoTable.finalY + 15;
-
-  // Photos Section
-  if (inspection.photo_urls && inspection.photo_urls.length > 0) {
-    yPos = await addPhotosToPDF(doc, inspection.photo_urls, yPos, margin, pageWidth, pageHeight);
-  }
-
-  // AI Analysis Section
-  if (inspection.analysis_report) {
-    if (yPos > pageHeight - 100) {
-      doc.addPage();
-      yPos = margin;
-    }
-
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('AI Analysis & Recommendations', margin, yPos);
-    yPos += 10;
-
+    ['Size', inspection.length && inspection.width ? `${inspection.length}' × ${inspection.width}'` : '—'],
+  ], rugYStart + 14, margin + cardWidth + 10, cardWidth);
+  
+  yPos += 5;
+  
+  // Notes if present
+  if (inspection.notes) {
+    yPos = addSectionHeader(doc, 'Notes', yPos, margin);
+    
+    doc.setFillColor(...COLORS.background);
+    const noteLines = doc.splitTextToSize(inspection.notes, pageWidth - margin * 2 - 16);
+    const noteHeight = noteLines.length * 5 + 10;
+    drawRoundedRect(doc, margin, yPos, pageWidth - margin * 2, noteHeight, 3);
+    
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-
-    const maxWidth = pageWidth - margin * 2;
-    const lines = doc.splitTextToSize(inspection.analysis_report, maxWidth);
-    const lineHeight = 5;
-
-    for (let i = 0; i < lines.length; i++) {
-      if (yPos + lineHeight > pageHeight - margin) {
-        doc.addPage();
-        yPos = margin;
-      }
-      doc.text(lines[i], margin, yPos);
-      yPos += lineHeight;
-    }
+    doc.setTextColor(...COLORS.text);
+    
+    let noteY = yPos + 7;
+    noteLines.forEach((line: string) => {
+      doc.text(line, margin + 8, noteY);
+      noteY += 5;
+    });
+    
+    yPos += noteHeight + 10;
   }
-
-  // Footer and header on all pages
+  
+  // Photos
+  if (inspection.photo_urls && inspection.photo_urls.length > 0) {
+    yPos = await addPhotosToPDF(doc, inspection.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+  }
+  
+  // AI Analysis
+  if (inspection.analysis_report) {
+    if (yPos > pageHeight - 80) {
+      doc.addPage();
+      yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+    }
+    
+    yPos = addSectionHeader(doc, 'Professional Analysis & Recommendations', yPos, margin);
+    yPos += 5;
+    
+    yPos = addFormattedAnalysis(
+      doc, 
+      inspection.analysis_report, 
+      yPos, 
+      margin, 
+      pageWidth, 
+      pageHeight,
+      branding,
+      cachedLogoBase64
+    );
+  }
+  
+  // Add footers to all pages
   const totalPages = doc.getNumberOfPages();
   const businessName = branding?.business_name || 'RugBoost';
-
+  
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
-
-    // Add logo header on pages after the first
-    if (i > 1) {
-      addLogoHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
-    }
-
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-    doc.text(`Generated by ${businessName}`, margin, pageHeight - 10);
+    addProfessionalFooter(doc, pageWidth, pageHeight, i, totalPages, businessName);
   }
-
-  // Save the PDF
-  const fileName = `rug-inspection-${inspection.rug_number}-${format(
-    new Date(inspection.created_at),
-    'yyyy-MM-dd'
-  )}.pdf`;
+  
+  // Save
+  const fileName = `rug-inspection-${inspection.rug_number}-${format(new Date(), 'yyyy-MM-dd')}.pdf`;
   doc.save(fileName);
 };
 
@@ -400,216 +584,156 @@ export const generateJobPDF = async (
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
-
-  // Cache logo for subsequent pages
-  let cachedLogoBase64: string | null = null;
-  if (branding?.logo_url) {
-    cachedLogoBase64 = await loadImageAsBase64(branding.logo_url);
-  }
-
+  const margin = 15;
+  
+  const { yPos: headerEndY, logoBase64: cachedLogoBase64 } = await addProfessionalHeader(doc, pageWidth, branding);
+  let yPos = headerEndY;
+  
   const businessName = branding?.business_name || 'RugBoost';
-
-  // Add logo header
-  let yPos = await addLogoHeader(doc, pageWidth, branding);
-  yPos += 5;
-
-  // Title Page
+  
+  // Title
   doc.setFontSize(28);
   doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.text);
   doc.text('Complete Job Report', pageWidth / 2, yPos, { align: 'center' });
-  yPos += 15;
-
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Job #${job.job_number}`, pageWidth / 2, yPos, { align: 'center' });
+  yPos += 12;
+  
+  // Job number badge
+  doc.setFillColor(...COLORS.primary);
+  const jobText = `Job #${job.job_number}`;
+  const jobWidth = doc.getTextWidth(jobText) + 24;
+  drawRoundedRect(doc, (pageWidth - jobWidth) / 2, yPos - 5, jobWidth, 12, 3);
+  
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.white);
+  doc.text(jobText, pageWidth / 2, yPos + 3, { align: 'center' });
   yPos += 20;
-
-  // Job Details
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Job Information', margin, yPos);
-  yPos += 8;
-
-  const jobInfo = [
-    ['Job Number', job.job_number],
-    ['Status', job.status.charAt(0).toUpperCase() + job.status.slice(1)],
-    ['Date Created', format(new Date(job.created_at), 'MMMM d, yyyy')],
+  
+  // Job and Client info in two columns
+  const cardWidth = (pageWidth - margin * 2 - 10) / 2;
+  
+  yPos = addSectionHeader(doc, 'Job Information', yPos, margin);
+  const statusDisplay = job.status.charAt(0).toUpperCase() + job.status.slice(1).replace('-', ' ');
+  yPos = addInfoCard(doc, [
+    ['Status', statusDisplay],
+    ['Date', format(new Date(job.created_at), 'MMM d, yyyy')],
     ['Total Rugs', rugs.length.toString()],
-  ];
-
-  autoTable(doc, {
-    startY: yPos,
-    head: [],
-    body: jobInfo,
-    theme: 'plain',
-    styles: { fontSize: 10 },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 50 },
-      1: { cellWidth: 'auto' },
-    },
-    margin: { left: margin },
-  });
-
-  yPos = (doc as any).lastAutoTable.finalY + 15;
-
-  // Client Information
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Client Information', margin, yPos);
-  yPos += 8;
-
-  const clientInfo = [
+    ['Analyzed', rugs.filter(r => r.analysis_report).length.toString()],
+  ], yPos, margin, cardWidth);
+  
+  const clientYStart = yPos - (4 * 8 + 10 + 8 + 14);
+  addSectionHeader(doc, 'Client Information', clientYStart, margin + cardWidth + 10);
+  addInfoCard(doc, [
     ['Name', job.client_name],
-    ['Email', job.client_email || 'N/A'],
-    ['Phone', job.client_phone || 'N/A'],
-  ];
-
-  autoTable(doc, {
-    startY: yPos,
-    head: [],
-    body: clientInfo,
-    theme: 'plain',
-    styles: { fontSize: 10 },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 50 },
-      1: { cellWidth: 'auto' },
-    },
-    margin: { left: margin },
-  });
-
-  yPos = (doc as any).lastAutoTable.finalY + 15;
-
-  if (job.notes) {
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Job Notes', margin, yPos);
-    yPos += 8;
-
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    const notesLines = doc.splitTextToSize(job.notes, pageWidth - margin * 2);
-    doc.text(notesLines, margin, yPos);
-    yPos += notesLines.length * 5 + 10;
-  }
-
-  // Rugs Summary Table
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Rugs Summary', margin, yPos);
-  yPos += 8;
-
+    ['Email', job.client_email || '—'],
+    ['Phone', job.client_phone || '—'],
+    ['Notes', job.notes ? (job.notes.length > 30 ? job.notes.substring(0, 30) + '...' : job.notes) : '—'],
+  ], clientYStart + 14, margin + cardWidth + 10, cardWidth);
+  
+  yPos += 5;
+  
+  // Rugs summary table
+  yPos = addSectionHeader(doc, 'Rugs Summary', yPos, margin);
+  
   const rugsSummary = rugs.map((rug, index) => [
     (index + 1).toString(),
     rug.rug_number,
     rug.rug_type,
-    rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : 'N/A',
+    rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : '—',
+    rug.analysis_report ? '✓ Analyzed' : 'Pending',
   ]);
-
+  
   autoTable(doc, {
     startY: yPos,
-    head: [['#', 'Rug Number', 'Type', 'Dimensions']],
+    head: [['#', 'Rug Number', 'Type', 'Dimensions', 'Status']],
     body: rugsSummary,
     theme: 'striped',
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: [33, 116, 198] },
+    styles: { 
+      fontSize: 9,
+      cellPadding: 4,
+    },
+    headStyles: { 
+      fillColor: COLORS.primary,
+      textColor: COLORS.white,
+      fontStyle: 'bold',
+    },
+    alternateRowStyles: {
+      fillColor: COLORS.background,
+    },
+    columnStyles: {
+      0: { cellWidth: 15, halign: 'center' },
+      4: { halign: 'center' },
+    },
     margin: { left: margin, right: margin },
   });
-
-  // Individual Rug Reports
-  for (let i = 0; i < rugs.length; i++) {
-    const rug = rugs[i];
+  
+  // Individual rug reports
+  for (const rug of rugs) {
     doc.addPage();
-
-    // Add logo header to new page
-    yPos = addLogoHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
-    yPos += 5;
-
-    // Rug Header
-    doc.setFontSize(18);
+    yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+    
+    // Rug title with badge
+    doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Rug ${i + 1}: ${rug.rug_number}`, pageWidth / 2, yPos, { align: 'center' });
-    yPos += 15;
-
-    // Rug Details
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Rug Details', margin, yPos);
-    yPos += 8;
-
-    const rugDetails = [
-      ['Rug Number', rug.rug_number],
-      ['Type', rug.rug_type],
-      ['Dimensions', rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : 'N/A'],
-      ['Inspected', format(new Date(rug.created_at), 'MMMM d, yyyy')],
-    ];
-
-    if (rug.notes) {
-      rugDetails.push(['Notes', rug.notes]);
-    }
-
-    autoTable(doc, {
-      startY: yPos,
-      head: [],
-      body: rugDetails,
-      theme: 'plain',
-      styles: { fontSize: 10 },
-      columnStyles: {
-        0: { fontStyle: 'bold', cellWidth: 50 },
-        1: { cellWidth: 'auto' },
-      },
-      margin: { left: margin },
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY + 15;
-
-    // Photos Section for this rug
-    if (rug.photo_urls && rug.photo_urls.length > 0) {
-      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight);
-    }
-
-    // AI Analysis
+    doc.setTextColor(...COLORS.text);
+    doc.text(`Rug: ${rug.rug_number}`, margin, yPos);
+    
+    // Status badge
     if (rug.analysis_report) {
-      if (yPos > pageHeight - 80) {
+      doc.setFillColor(...COLORS.success);
+      doc.roundedRect(pageWidth - margin - 25, yPos - 6, 25, 8, 2, 2, 'F');
+      doc.setFontSize(7);
+      doc.setTextColor(...COLORS.white);
+      doc.text('ANALYZED', pageWidth - margin - 12.5, yPos - 1, { align: 'center' });
+    }
+    
+    yPos += 12;
+    
+    // Rug details card
+    yPos = addInfoCard(doc, [
+      ['Type', rug.rug_type],
+      ['Dimensions', rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : '—'],
+      ['Notes', rug.notes || '—'],
+    ], yPos, margin, pageWidth - margin * 2);
+    
+    yPos += 5;
+    
+    // Photos
+    if (rug.photo_urls && rug.photo_urls.length > 0) {
+      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+    }
+    
+    // Analysis
+    if (rug.analysis_report) {
+      if (yPos > pageHeight - 60) {
         doc.addPage();
-        yPos = margin;
+        yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
       }
-
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('AI Analysis & Recommendations', margin, yPos);
-      yPos += 10;
-
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-
-      const maxWidth = pageWidth - margin * 2;
-      const lines = doc.splitTextToSize(rug.analysis_report, maxWidth);
-      const lineHeight = 5;
-
-      for (let j = 0; j < lines.length; j++) {
-        if (yPos + lineHeight > pageHeight - margin) {
-          doc.addPage();
-          yPos = margin;
-        }
-        doc.text(lines[j], margin, yPos);
-        yPos += lineHeight;
-      }
+      
+      yPos = addSectionHeader(doc, 'Professional Analysis', yPos, margin);
+      yPos += 5;
+      
+      yPos = addFormattedAnalysis(
+        doc,
+        rug.analysis_report,
+        yPos,
+        margin,
+        pageWidth,
+        pageHeight,
+        branding,
+        cachedLogoBase64
+      );
     }
   }
-
-  // Footer on all pages
+  
+  // Add footers
   const totalPages = doc.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-    doc.text(`Generated by ${businessName}`, margin, pageHeight - 10);
-    doc.text(`Job #${job.job_number}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
+    addProfessionalFooter(doc, pageWidth, pageHeight, i, totalPages, businessName, job.job_number);
   }
-
+  
   // Save
   const fileName = `job-report-${job.job_number}-${format(new Date(), 'yyyy-MM-dd')}.pdf`;
   doc.save(fileName);
@@ -624,193 +748,132 @@ export const generateJobPDFBase64 = async (
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
-
-  // Cache logo for subsequent pages
-  let cachedLogoBase64: string | null = null;
-  if (branding?.logo_url) {
-    cachedLogoBase64 = await loadImageAsBase64(branding.logo_url);
-  }
-
+  const margin = 15;
+  
+  const { yPos: headerEndY, logoBase64: cachedLogoBase64 } = await addProfessionalHeader(doc, pageWidth, branding);
+  let yPos = headerEndY;
+  
   const businessName = branding?.business_name || 'RugBoost';
-
-  // Add logo header
-  let yPos = await addLogoHeader(doc, pageWidth, branding);
-  yPos += 5;
-
-  // Title Page
+  
+  // Title
   doc.setFontSize(28);
   doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.text);
   doc.text('Complete Job Report', pageWidth / 2, yPos, { align: 'center' });
-  yPos += 15;
-
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Job #${job.job_number}`, pageWidth / 2, yPos, { align: 'center' });
+  yPos += 12;
+  
+  // Job number badge
+  doc.setFillColor(...COLORS.primary);
+  const jobText = `Job #${job.job_number}`;
+  const jobWidth = doc.getTextWidth(jobText) + 24;
+  drawRoundedRect(doc, (pageWidth - jobWidth) / 2, yPos - 5, jobWidth, 12, 3);
+  
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.white);
+  doc.text(jobText, pageWidth / 2, yPos + 3, { align: 'center' });
   yPos += 20;
-
-  // Job Details
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Job Information', margin, yPos);
-  yPos += 8;
-
-  const jobInfo = [
-    ['Job Number', job.job_number],
-    ['Status', job.status.charAt(0).toUpperCase() + job.status.slice(1)],
-    ['Date Created', format(new Date(job.created_at), 'MMMM d, yyyy')],
+  
+  // Job and Client info
+  const cardWidth = (pageWidth - margin * 2 - 10) / 2;
+  
+  yPos = addSectionHeader(doc, 'Job Information', yPos, margin);
+  const statusDisplay = job.status.charAt(0).toUpperCase() + job.status.slice(1).replace('-', ' ');
+  yPos = addInfoCard(doc, [
+    ['Status', statusDisplay],
+    ['Date', format(new Date(job.created_at), 'MMM d, yyyy')],
     ['Total Rugs', rugs.length.toString()],
-  ];
-
-  autoTable(doc, {
-    startY: yPos,
-    head: [],
-    body: jobInfo,
-    theme: 'plain',
-    styles: { fontSize: 10 },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 50 },
-      1: { cellWidth: 'auto' },
-    },
-    margin: { left: margin },
-  });
-
-  yPos = (doc as any).lastAutoTable.finalY + 15;
-
-  // Client Information
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Client Information', margin, yPos);
-  yPos += 8;
-
-  const clientInfo = [
+    ['Analyzed', rugs.filter(r => r.analysis_report).length.toString()],
+  ], yPos, margin, cardWidth);
+  
+  const clientYStart = yPos - (4 * 8 + 10 + 8 + 14);
+  addSectionHeader(doc, 'Client Information', clientYStart, margin + cardWidth + 10);
+  addInfoCard(doc, [
     ['Name', job.client_name],
     ['Email', job.client_email || '—'],
     ['Phone', job.client_phone || '—'],
-  ];
-
-  autoTable(doc, {
-    startY: yPos,
-    head: [],
-    body: clientInfo,
-    theme: 'plain',
-    styles: { fontSize: 10 },
-    columnStyles: {
-      0: { fontStyle: 'bold', cellWidth: 50 },
-      1: { cellWidth: 'auto' },
-    },
-    margin: { left: margin },
-  });
-
-  yPos = (doc as any).lastAutoTable.finalY + 15;
-
-  // Rugs Summary Table
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Rugs Summary', margin, yPos);
-  yPos += 8;
-
+    ['Notes', job.notes ? (job.notes.length > 30 ? job.notes.substring(0, 30) + '...' : job.notes) : '—'],
+  ], clientYStart + 14, margin + cardWidth + 10, cardWidth);
+  
+  yPos += 5;
+  
+  // Rugs summary
+  yPos = addSectionHeader(doc, 'Rugs Summary', yPos, margin);
+  
   const rugsSummary = rugs.map((rug, index) => [
     (index + 1).toString(),
     rug.rug_number,
     rug.rug_type,
     rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : '—',
-    rug.analysis_report ? '✓' : '—',
+    rug.analysis_report ? '✓ Analyzed' : 'Pending',
   ]);
-
+  
   autoTable(doc, {
     startY: yPos,
-    head: [['#', 'Rug Number', 'Type', 'Dimensions', 'Analyzed']],
+    head: [['#', 'Rug Number', 'Type', 'Dimensions', 'Status']],
     body: rugsSummary,
     theme: 'striped',
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: [33, 116, 198] },
+    styles: { fontSize: 9, cellPadding: 4 },
+    headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: COLORS.background },
+    columnStyles: { 0: { cellWidth: 15, halign: 'center' }, 4: { halign: 'center' } },
     margin: { left: margin, right: margin },
   });
-
-  // Individual Rug Reports
+  
+  // Individual rug reports
   for (const rug of rugs) {
     doc.addPage();
+    yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
     
-    // Add header to new page
-    addLogoHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
-    yPos = 45;
-
-    // Rug Title
-    doc.setFontSize(18);
+    doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.text);
     doc.text(`Rug: ${rug.rug_number}`, margin, yPos);
+    
+    if (rug.analysis_report) {
+      doc.setFillColor(...COLORS.success);
+      doc.roundedRect(pageWidth - margin - 25, yPos - 6, 25, 8, 2, 2, 'F');
+      doc.setFontSize(7);
+      doc.setTextColor(...COLORS.white);
+      doc.text('ANALYZED', pageWidth - margin - 12.5, yPos - 1, { align: 'center' });
+    }
+    
     yPos += 12;
-
-    // Rug Details
-    const rugDetails = [
-      ['Rug Number', rug.rug_number],
+    
+    yPos = addInfoCard(doc, [
       ['Type', rug.rug_type],
       ['Dimensions', rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : '—'],
       ['Notes', rug.notes || '—'],
-    ];
-
-    autoTable(doc, {
-      startY: yPos,
-      head: [],
-      body: rugDetails,
-      theme: 'plain',
-      styles: { fontSize: 10 },
-      columnStyles: {
-        0: { fontStyle: 'bold', cellWidth: 50 },
-        1: { cellWidth: 'auto' },
-      },
-      margin: { left: margin },
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY + 10;
-
-    // Analysis Report
+    ], yPos, margin, pageWidth - margin * 2);
+    
+    yPos += 5;
+    
+    if (rug.photo_urls && rug.photo_urls.length > 0) {
+      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+    }
+    
     if (rug.analysis_report) {
-      if (yPos > pageHeight - 100) {
+      if (yPos > pageHeight - 60) {
         doc.addPage();
-        addLogoHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
-        yPos = 45;
+        yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
       }
-
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text('Analysis Report', margin, yPos);
-      yPos += 8;
-
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-
-      const maxWidth = pageWidth - 2 * margin;
-      const lines = doc.splitTextToSize(rug.analysis_report, maxWidth);
-
-      for (const line of lines) {
-        if (yPos > pageHeight - 30) {
-          doc.addPage();
-          addLogoHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
-          yPos = 45;
-        }
-        doc.text(line, margin, yPos);
-        yPos += 5;
-      }
+      
+      yPos = addSectionHeader(doc, 'Professional Analysis', yPos, margin);
+      yPos += 5;
+      
+      yPos = addFormattedAnalysis(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
     }
   }
-
-  // Footer on all pages
+  
+  // Footers
   const totalPages = doc.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-    doc.text(`Generated by ${businessName}`, margin, pageHeight - 10);
-    doc.text(`Job #${job.job_number}`, pageWidth - margin, pageHeight - 10, { align: 'right' });
+    addProfessionalFooter(doc, pageWidth, pageHeight, i, totalPages, businessName, job.job_number);
   }
-
-  // Return as base64 (without the data:application/pdf;base64, prefix)
+  
+  // Return as base64
   const pdfOutput = doc.output('datauristring');
-  // Extract just the base64 part
   const base64 = pdfOutput.split(',')[1];
   return base64;
 };
