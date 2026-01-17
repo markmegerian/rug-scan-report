@@ -18,6 +18,7 @@ interface EmailRequest {
   businessPhone?: string;
 }
 
+// SMTP client that handles STARTTLS on port 587
 async function sendSMTPEmail(options: {
   host: string;
   port: number;
@@ -31,81 +32,115 @@ async function sendSMTPEmail(options: {
 }) {
   const { host, port, username, password, from, to, subject, html, attachments } = options;
   
-  const conn = await Deno.connectTls({ hostname: host, port });
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   
+  // Connect with plain TCP first
+  let conn: Deno.TcpConn | Deno.TlsConn = await Deno.connect({ hostname: host, port });
+  
   const readResponse = async (): Promise<string> => {
-    const buffer = new Uint8Array(1024);
-    const n = await conn.read(buffer);
-    return decoder.decode(buffer.subarray(0, n!));
+    const buffer = new Uint8Array(4096);
+    let response = "";
+    try {
+      const n = await conn.read(buffer);
+      if (n) response = decoder.decode(buffer.subarray(0, n));
+    } catch (e) {
+      console.log("Read error:", e);
+    }
+    console.log("SMTP <", response.trim());
+    return response;
   };
   
-  const sendCommand = async (cmd: string): Promise<string> => {
+  const sendCommand = async (cmd: string, hideLog = false): Promise<string> => {
+    console.log("SMTP >", hideLog ? cmd.split(" ")[0] + " ***" : cmd);
     await conn.write(encoder.encode(cmd + "\r\n"));
     return await readResponse();
   };
   
-  // Initial greeting
-  await readResponse();
-  
-  // EHLO
-  await sendCommand(`EHLO localhost`);
-  
-  // AUTH LOGIN
-  await sendCommand("AUTH LOGIN");
-  await sendCommand(btoa(username));
-  await sendCommand(btoa(password));
-  
-  // MAIL FROM
-  await sendCommand(`MAIL FROM:<${username}>`);
-  
-  // RCPT TO
-  await sendCommand(`RCPT TO:<${to}>`);
-  
-  // DATA
-  await sendCommand("DATA");
-  
-  // Build email with MIME
-  const boundary = "----=_Part_" + Math.random().toString(36).substring(2);
-  
-  let emailContent = `From: ${from}\r\n`;
-  emailContent += `To: ${to}\r\n`;
-  emailContent += `Subject: ${subject}\r\n`;
-  emailContent += `MIME-Version: 1.0\r\n`;
-  
-  if (attachments && attachments.length > 0) {
-    emailContent += `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n`;
-    emailContent += `--${boundary}\r\n`;
-    emailContent += `Content-Type: text/html; charset=utf-8\r\n`;
-    emailContent += `Content-Transfer-Encoding: 7bit\r\n\r\n`;
-    emailContent += html + "\r\n";
+  try {
+    // Read server greeting
+    await readResponse();
     
-    for (const att of attachments) {
-      emailContent += `--${boundary}\r\n`;
-      emailContent += `Content-Type: application/pdf; name="${att.filename}"\r\n`;
-      emailContent += `Content-Disposition: attachment; filename="${att.filename}"\r\n`;
-      emailContent += `Content-Transfer-Encoding: base64\r\n\r\n`;
-      // Split base64 into 76-char lines
-      const b64 = att.content;
-      for (let i = 0; i < b64.length; i += 76) {
-        emailContent += b64.substring(i, i + 76) + "\r\n";
-      }
+    // EHLO
+    await sendCommand(`EHLO localhost`);
+    
+    // STARTTLS
+    const starttlsResp = await sendCommand("STARTTLS");
+    if (starttlsResp.startsWith("220")) {
+      // Upgrade to TLS
+      conn = await Deno.startTls(conn, { hostname: host });
+      console.log("TLS connection established");
+      
+      // EHLO again after TLS
+      await sendCommand(`EHLO localhost`);
     }
-    emailContent += `--${boundary}--\r\n`;
-  } else {
-    emailContent += `Content-Type: text/html; charset=utf-8\r\n\r\n`;
-    emailContent += html + "\r\n";
+    
+    // AUTH LOGIN
+    await sendCommand("AUTH LOGIN");
+    await sendCommand(btoa(username), true);
+    const authResp = await sendCommand(btoa(password), true);
+    
+    if (!authResp.startsWith("235")) {
+      throw new Error("Authentication failed: " + authResp);
+    }
+    
+    // MAIL FROM
+    await sendCommand(`MAIL FROM:<${username}>`);
+    
+    // RCPT TO
+    await sendCommand(`RCPT TO:<${to}>`);
+    
+    // DATA
+    await sendCommand("DATA");
+    
+    // Build MIME email
+    const boundary = "----=_Part_" + Math.random().toString(36).substring(2);
+    
+    let emailContent = `From: ${from}\r\n`;
+    emailContent += `To: ${to}\r\n`;
+    emailContent += `Subject: ${subject}\r\n`;
+    emailContent += `MIME-Version: 1.0\r\n`;
+    
+    if (attachments && attachments.length > 0) {
+      emailContent += `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n`;
+      emailContent += `--${boundary}\r\n`;
+      emailContent += `Content-Type: text/html; charset=utf-8\r\n`;
+      emailContent += `Content-Transfer-Encoding: 7bit\r\n\r\n`;
+      emailContent += html + "\r\n";
+      
+      for (const att of attachments) {
+        emailContent += `--${boundary}\r\n`;
+        emailContent += `Content-Type: application/pdf; name="${att.filename}"\r\n`;
+        emailContent += `Content-Disposition: attachment; filename="${att.filename}"\r\n`;
+        emailContent += `Content-Transfer-Encoding: base64\r\n\r\n`;
+        // Split base64 into 76-char lines
+        const b64 = att.content;
+        for (let i = 0; i < b64.length; i += 76) {
+          emailContent += b64.substring(i, i + 76) + "\r\n";
+        }
+      }
+      emailContent += `--${boundary}--\r\n`;
+    } else {
+      emailContent += `Content-Type: text/html; charset=utf-8\r\n\r\n`;
+      emailContent += html + "\r\n";
+    }
+    
+    emailContent += "\r\n.\r\n";
+    
+    console.log("SMTP > [EMAIL CONTENT]");
+    await conn.write(encoder.encode(emailContent));
+    const dataResp = await readResponse();
+    
+    if (!dataResp.startsWith("250")) {
+      throw new Error("Failed to send email data: " + dataResp);
+    }
+    
+    // QUIT
+    await sendCommand("QUIT");
+    
+  } finally {
+    try { conn.close(); } catch (_) {}
   }
-  
-  emailContent += "\r\n.\r\n";
-  
-  await conn.write(encoder.encode(emailContent));
-  await readResponse();
-  
-  // QUIT
-  await sendCommand("QUIT");
-  conn.close();
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -116,10 +151,10 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { to, clientName, jobNumber, rugDetails, pdfBase64, subject, customMessage, businessName, businessEmail, businessPhone }: EmailRequest = await req.json();
 
-    console.log("Sending email to:", to, "Job:", jobNumber);
+    console.log("Sending email to:", to, "Job:", jobNumber, "Attachment:", !!pdfBase64);
 
     const smtpHost = Deno.env.get("SMTP_HOST") || "";
-    const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "465");
+    const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "587");
     const smtpUser = Deno.env.get("SMTP_USER") || "";
     const smtpPassword = Deno.env.get("SMTP_PASSWORD") || "";
 
@@ -152,7 +187,7 @@ const handler = async (req: Request): Promise<Response> => {
       attachments,
     });
 
-    console.log("Email sent successfully");
+    console.log("Email sent successfully!");
     return new Response(JSON.stringify({ success: true }), { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } });
   } catch (error: any) {
     console.error("Error:", error.message);
