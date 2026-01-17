@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, Loader2, Eye, Download, Trash2, 
-  Edit2, FileText, CheckCircle, Clock, PlayCircle, Sparkles, FolderOpen
+  Edit2, FileText, CheckCircle, Clock, PlayCircle, Sparkles, FolderOpen, Mail
 } from 'lucide-react';
 import rugboostLogo from '@/assets/rugboost-logo.svg';
 import { toast } from 'sonner';
@@ -68,6 +68,7 @@ const JobDetail = () => {
   const [selectedRug, setSelectedRug] = useState<Rug | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [branding, setBranding] = useState<BusinessBranding | null>(null);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -431,6 +432,55 @@ const JobDetail = () => {
     }
   };
 
+  const handleSendEmail = async () => {
+    if (!job || rugs.length === 0) {
+      toast.error('No rugs to include in the report');
+      return;
+    }
+
+    if (!job.client_email) {
+      toast.error('Client email is required to send report');
+      return;
+    }
+
+    const analyzedRugs = rugs.filter(r => r.analysis_report);
+    if (analyzedRugs.length === 0) {
+      toast.error('Please analyze at least one rug before sending the report');
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const rugDetails = analyzedRugs.map(rug => ({
+        rugNumber: rug.rug_number,
+        rugType: rug.rug_type,
+        dimensions: rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : '—',
+      }));
+
+      const { data, error } = await supabase.functions.invoke('send-report-email', {
+        body: {
+          to: job.client_email,
+          clientName: job.client_name,
+          jobNumber: job.job_number,
+          rugDetails,
+          businessName: branding?.business_name,
+          businessEmail: branding?.business_email,
+          businessPhone: branding?.business_phone,
+        }
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      toast.success(`Report sent to ${job.client_email}!`);
+    } catch (error) {
+      console.error('Email send error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to send email');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   const handleDeleteRug = async (rugId: string) => {
     if (!confirm('Are you sure you want to delete this rug?')) return;
 
@@ -651,15 +701,37 @@ const JobDetail = () => {
                     )}
                   </Button>
                 )}
-                {rugs.length > 0 && rugs.every(r => r.analysis_report) && (
-                  <Button 
-                    variant="outline" 
-                    className="gap-2"
-                    onClick={handleDownloadJobPDF}
-                  >
-                    <FileText className="h-4 w-4" />
-                    Download Full Report
-                  </Button>
+                {rugs.length > 0 && rugs.some(r => r.analysis_report) && (
+                  <>
+                    <Button 
+                      variant="outline" 
+                      className="gap-2"
+                      onClick={handleDownloadJobPDF}
+                    >
+                      <FileText className="h-4 w-4" />
+                      Download Report
+                    </Button>
+                    {job.client_email && (
+                      <Button 
+                        variant="outline" 
+                        className="gap-2"
+                        onClick={handleSendEmail}
+                        disabled={sendingEmail}
+                      >
+                        {sendingEmail ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="h-4 w-4" />
+                            Email Report
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </>
                 )}
                 <Dialog open={isAddingRug} onOpenChange={setIsAddingRug}>
                   <DialogTrigger asChild>

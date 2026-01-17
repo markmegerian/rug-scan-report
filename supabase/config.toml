@@ -2,3 +2,6 @@ project_id = "tviommdnpvfceuprrwzf"
 
 [functions.analyze-rug]
 verify_jwt = false
+
+[functions.send-report-email]
+verify_jwt = false
