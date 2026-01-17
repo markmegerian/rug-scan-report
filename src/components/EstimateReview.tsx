@@ -63,98 +63,147 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
     const services: ServiceItem[] = [];
     const lines = reportText.split('\n');
     
-    let inServicesSection = false;
-    let inCostsSection = false;
+    // Pattern 1: Table format with pipe separators (e.g., "Deep hand wash | 80 sq ft | $6.50 / sq ft | $520.00")
+    const tablePattern = /^\s*\|?\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*\$?([0-9,.]+)\s*\/?\s*[^|]*\s*\|\s*\$?([0-9,.]+)/;
     
-    for (const line of lines) {
+    // Pattern 2: Service with cost range (e.g., "Estimated Cost: $200 - $400" or "• Service Name: $500")
+    const costRangePattern = /\$([0-9,]+)(?:\s*[-–]\s*\$?([0-9,]+))?/g;
+    
+    // Pattern 3: Bulleted service with description (e.g., "• Blocking & stretching (restore flat, true shape)")
+    const bulletServicePattern = /^[\s•\-*]+(.+?)(?:\(|$)/;
+    
+    let currentService: { name: string; priority: 'high' | 'medium' | 'low' } | null = null;
+    let inCostSection = false;
+    let inRecommendedSection = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       const lowerLine = line.toLowerCase();
       
-      // Detect sections
-      if (lowerLine.includes('recommended service') || lowerLine.includes('services needed')) {
-        inServicesSection = true;
-        inCostsSection = false;
-        continue;
+      // Track sections
+      if (lowerLine.includes('recommended service') || lowerLine.includes('priority')) {
+        inRecommendedSection = true;
+        inCostSection = false;
       }
-      if (lowerLine.includes('estimated cost') || lowerLine.includes('cost estimate') || lowerLine.includes('pricing')) {
-        inCostsSection = true;
-        inServicesSection = false;
-        continue;
+      if (lowerLine.includes('estimated cost') || lowerLine.includes('line-item') || lowerLine.includes('quantities')) {
+        inCostSection = true;
+        inRecommendedSection = false;
       }
-      if (lowerLine.includes('total') && lowerLine.includes('cost')) {
-        inCostsSection = false;
-        continue;
-      }
-      if (lowerLine.includes('timeline') || lowerLine.includes('recommendation')) {
-        inServicesSection = false;
-        inCostsSection = false;
-        continue;
+      if (lowerLine.includes('total estimated') || lowerLine.includes('timeline') || lowerLine.includes('assumptions')) {
+        inCostSection = false;
+        inRecommendedSection = false;
       }
       
-      // Parse service/cost lines
-      if ((inServicesSection || inCostsSection) && (line.startsWith('- ') || line.startsWith('* '))) {
-        const content = line.replace(/^[-*]\s*/, '').trim();
+      // Skip header/separator lines
+      if (line.includes('---') || line.includes('Service') && line.includes('Qty')) continue;
+      
+      // Try to match table format
+      const tableMatch = line.match(tablePattern);
+      if (tableMatch && inCostSection) {
+        const serviceName = tableMatch[1].trim().replace(/^\*\*|\*\*$/g, '').replace(/^OPTIONAL:\s*/i, '');
+        const totalCost = parseFloat(tableMatch[4].replace(',', ''));
         
-        // Try to extract price
-        const priceMatch = content.match(/\$([0-9,]+(?:\.[0-9]{2})?)/);
-        const price = priceMatch ? parseFloat(priceMatch[1].replace(',', '')) : 0;
-        
-        // Try to extract priority
-        let priority: 'high' | 'medium' | 'low' = 'medium';
-        if (lowerLine.includes('high priority') || lowerLine.includes('urgent') || lowerLine.includes('critical')) {
-          priority = 'high';
-        } else if (lowerLine.includes('low priority') || lowerLine.includes('optional')) {
-          priority = 'low';
-        }
-        
-        // Extract service name (before price or colon)
-        let serviceName = content;
-        if (priceMatch) {
-          serviceName = content.substring(0, content.indexOf('$')).trim();
-        }
-        // Clean up common patterns
-        serviceName = serviceName
-          .replace(/:\s*$/, '')
-          .replace(/\s*-\s*$/, '')
-          .replace(/\*\*/g, '')
-          .replace(/^\d+\.\s*/, '')
-          .trim();
-        
-        // Skip if too short or looks like a header
-        if (serviceName.length < 3 || serviceName.endsWith(':')) continue;
-        
-        // Check if this service already exists
-        const existingIndex = services.findIndex(
-          s => s.name.toLowerCase() === serviceName.toLowerCase()
-        );
-        
-        if (existingIndex >= 0) {
-          // Update price if found
-          if (price > 0) {
-            services[existingIndex].unitPrice = price;
-          }
-        } else {
+        if (serviceName && !isNaN(totalCost) && serviceName.length > 2) {
           services.push({
             id: crypto.randomUUID(),
             name: serviceName,
             quantity: 1,
-            unitPrice: price,
-            priority,
+            unitPrice: totalCost,
+            priority: serviceName.toLowerCase().includes('optional') ? 'low' : 'medium',
           });
         }
+        continue;
+      }
+      
+      // Detect priority levels and service names
+      if (lowerLine.includes('priority') && (lowerLine.includes('high') || lowerLine.includes('essential') || lowerLine.includes('1'))) {
+        currentService = { name: '', priority: 'high' };
+      } else if (lowerLine.includes('priority') && (lowerLine.includes('medium') || lowerLine.includes('2'))) {
+        currentService = { name: '', priority: 'medium' };
+      } else if (lowerLine.includes('priority') && (lowerLine.includes('low') || lowerLine.includes('optional') || lowerLine.includes('3'))) {
+        currentService = { name: '', priority: 'low' };
+      }
+      
+      // Match numbered service items (e.g., "1. **Cleaning and Color Restoration**:")
+      const numberedServiceMatch = line.match(/^\d+\.\s*\*?\*?([^*:]+)\*?\*?\s*:?\s*$/);
+      if (numberedServiceMatch && inRecommendedSection) {
+        const serviceName = numberedServiceMatch[1].trim();
+        currentService = { name: serviceName, priority: 'medium' };
+        continue;
+      }
+      
+      // Match bulleted priority services (e.g., "• Deep hand wash + deep clean")
+      const bulletMatch = line.match(bulletServicePattern);
+      if (bulletMatch && inRecommendedSection && currentService) {
+        const serviceName = bulletMatch[1].trim();
+        if (serviceName.length > 3 && !serviceName.toLowerCase().includes('priority')) {
+          services.push({
+            id: crypto.randomUUID(),
+            name: serviceName,
+            quantity: 1,
+            unitPrice: 0,
+            priority: currentService.priority,
+          });
+        }
+        continue;
+      }
+      
+      // Check for cost lines after service names
+      if (currentService?.name && lowerLine.includes('estimated cost')) {
+        const costs = [...line.matchAll(costRangePattern)];
+        if (costs.length > 0) {
+          const lowCost = parseFloat(costs[0][1].replace(',', ''));
+          const highCost = costs[0][2] ? parseFloat(costs[0][2].replace(',', '')) : lowCost;
+          const avgCost = (lowCost + highCost) / 2;
+          
+          // Find if service already exists, update it with cost
+          const existingIdx = services.findIndex(s => 
+            s.name.toLowerCase() === currentService!.name.toLowerCase()
+          );
+          
+          if (existingIdx >= 0) {
+            services[existingIdx].unitPrice = avgCost;
+          } else if (currentService.name) {
+            services.push({
+              id: crypto.randomUUID(),
+              name: currentService.name,
+              quantity: 1,
+              unitPrice: avgCost,
+              priority: currentService.priority,
+            });
+          }
+          currentService = null;
+        }
+      }
+      
+      // Capture service name from bold headers
+      const boldServiceMatch = line.match(/^\d+\.\s*\*\*(.+?)\*\*:?\s*$/);
+      if (boldServiceMatch) {
+        currentService = { name: boldServiceMatch[1].trim(), priority: 'medium' };
+      }
+      
+      // Check next lines for priority after service name
+      if (currentService?.name && lowerLine.includes('priority:')) {
+        if (lowerLine.includes('high')) currentService.priority = 'high';
+        else if (lowerLine.includes('low')) currentService.priority = 'low';
       }
     }
     
-    // Match with available services to get proper pricing
-    return services.map(service => {
-      const matchedService = availableServices.find(
-        as => as.name.toLowerCase().includes(service.name.toLowerCase()) ||
-              service.name.toLowerCase().includes(as.name.toLowerCase())
-      );
-      if (matchedService && service.unitPrice === 0) {
-        return { ...service, unitPrice: matchedService.unitPrice };
-      }
-      return service;
-    });
+    // Match with available services to get proper pricing where missing
+    return services
+      .filter(s => s.name.length > 2)
+      .map(service => {
+        if (service.unitPrice === 0) {
+          const matchedService = availableServices.find(
+            as => as.name.toLowerCase().includes(service.name.toLowerCase()) ||
+                  service.name.toLowerCase().includes(as.name.toLowerCase())
+          );
+          if (matchedService) {
+            return { ...service, unitPrice: matchedService.unitPrice };
+          }
+        }
+        return service;
+      });
   };
 
   const handleUpdateService = (id: string, updates: Partial<ServiceItem>) => {
