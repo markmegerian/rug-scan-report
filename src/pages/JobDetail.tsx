@@ -309,7 +309,8 @@ const JobDetail = () => {
             length: rug.length?.toString() || '',
             width: rug.width?.toString() || '',
             notes: rug.notes || ''
-          }
+          },
+          userId: user?.id
         }
       });
 
@@ -361,7 +362,8 @@ const JobDetail = () => {
               length: rug.length?.toString() || '',
               width: rug.width?.toString() || '',
               notes: rug.notes || ''
-            }
+            },
+            userId: user?.id
           }
         });
 

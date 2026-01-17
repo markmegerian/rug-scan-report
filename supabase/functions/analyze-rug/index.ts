@@ -1,5 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const openAIApiKey = Deno.env.get("OPENAI_API_KEY");
 const PROMPT_ID = "pmpt_696a8de58b648196aef26ad720ec3c720318d629e12dba15";
@@ -16,13 +17,44 @@ serve(async (req) => {
   }
 
   try {
-    const { photos, rugInfo } = await req.json();
+    const { photos, rugInfo, userId } = await req.json();
 
     if (!openAIApiKey) {
       throw new Error("OpenAI API key is not configured");
     }
 
     console.log(`Analyzing rug inspection for ${rugInfo.rugNumber} with ${photos.length} photos using custom prompt`);
+
+    // Fetch user's service prices if userId is provided
+    let servicePricesText = "";
+    if (userId) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+        const { data: prices, error } = await supabase
+          .from("service_prices")
+          .select("service_name, unit_price")
+          .eq("user_id", userId);
+
+        if (!error && prices && prices.length > 0) {
+          servicePricesText = "\n\n**Service Pricing (per unit):**\n";
+          prices.forEach((price: { service_name: string; unit_price: number }) => {
+            if (price.unit_price > 0) {
+              servicePricesText += `- ${price.service_name}: $${price.unit_price.toFixed(2)}\n`;
+            }
+          });
+          servicePricesText += "\nUse these prices when calculating cost estimates. If a service is not listed or has a $0 price, use industry standard estimates.";
+          console.log("Loaded service prices for user:", userId);
+        } else {
+          console.log("No service prices found for user, using default estimates");
+        }
+      } catch (priceError) {
+        console.error("Error fetching service prices:", priceError);
+        // Continue without prices - will use default estimates
+      }
+    }
 
     // Build the image content array for the Responses API
     const imageContent = photos.map((photoUrl: string) => ({
@@ -31,20 +63,20 @@ serve(async (req) => {
       detail: "high",
     }));
 
-    // Build the user input with rug details and images
+    // Build the user input with rug details, service prices, and images
     const userInput = `**Rug Details:**
 - Client: ${rugInfo.clientName}
 - Rug Number: ${rugInfo.rugNumber}
 - Type: ${rugInfo.rugType}
 - Dimensions: ${rugInfo.length || "Unknown"}' × ${rugInfo.width || "Unknown"}'
 
-**Additional Notes from Inspector:** ${rugInfo.notes || "None provided"}
+**Additional Notes from Inspector:** ${rugInfo.notes || "None provided"}${servicePricesText}
 
 Please examine the attached ${photos.length} photograph(s) and provide:
 1. Overall condition assessment
 2. Specific issues identified
 3. Recommended services with priority levels
-4. Estimated costs for each service
+4. Estimated costs for each service (use the provided pricing if available)
 5. Total estimated cost range
 6. Recommended timeline for restoration`;
 
