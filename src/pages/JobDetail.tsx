@@ -21,6 +21,7 @@ import JobForm from '@/components/JobForm';
 import EditRugDialog from '@/components/EditRugDialog';
 import AnalysisReport from '@/components/AnalysisReport';
 import EmailPreviewDialog from '@/components/EmailPreviewDialog';
+import EstimateReview from '@/components/EstimateReview';
 
 interface Job {
   id: string;
@@ -68,9 +69,11 @@ const JobDetail = () => {
   const [savingRug, setSavingRug] = useState(false);
   const [selectedRug, setSelectedRug] = useState<Rug | null>(null);
   const [showReport, setShowReport] = useState(false);
+  const [showEstimateReview, setShowEstimateReview] = useState(false);
   const [branding, setBranding] = useState<BusinessBranding | null>(null);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [showEmailPreview, setShowEmailPreview] = useState(false);
+  const [servicePrices, setServicePrices] = useState<{ name: string; unitPrice: number }[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -82,6 +85,7 @@ const JobDetail = () => {
     if (user && jobId) {
       fetchJobDetails();
       fetchBranding();
+      fetchServicePrices();
     }
   }, [user, jobId]);
 
@@ -103,6 +107,26 @@ const JobDetail = () => {
       }
     } catch (error) {
       console.error('Error fetching branding:', error);
+    }
+  };
+
+  const fetchServicePrices = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('service_prices')
+        .select('service_name, unit_price')
+        .eq('user_id', user!.id);
+
+      if (error) {
+        console.error('Error fetching service prices:', error);
+        return;
+      }
+
+      if (data) {
+        setServicePrices(data.map(p => ({ name: p.service_name, unitPrice: p.unit_price })));
+      }
+    } catch (error) {
+      console.error('Error fetching service prices:', error);
     }
   };
 
@@ -557,6 +581,60 @@ const JobDetail = () => {
 
   if (!job) return null;
 
+  if (showEstimateReview && selectedRug) {
+    const squareFootage = selectedRug.length && selectedRug.width 
+      ? selectedRug.length * selectedRug.width 
+      : null;
+    
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-md">
+          <div className="container mx-auto flex items-center justify-between px-4 py-4">
+            <div className="flex items-center gap-3">
+              <img src={rugboostLogo} alt="RugBoost" className="h-10 w-10" />
+              <div>
+                <h1 className="font-display text-xl font-bold text-foreground">RugBoost</h1>
+                <p className="text-xs text-muted-foreground">{selectedRug.rug_number} - Estimate Review</p>
+              </div>
+            </div>
+            <Button variant="outline" onClick={() => {
+              setShowEstimateReview(false);
+              setShowReport(true);
+            }}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Report
+            </Button>
+          </div>
+        </header>
+        <main className="container mx-auto px-4 py-8">
+          <div className="mx-auto max-w-3xl">
+            <EstimateReview
+              report={selectedRug.analysis_report || ''}
+              rugInfo={{
+                rugNumber: selectedRug.rug_number,
+                rugType: selectedRug.rug_type,
+                dimensions: `${selectedRug.length || '–'}' × ${selectedRug.width || '–'}'`,
+                squareFootage,
+              }}
+              availableServices={servicePrices}
+              onBack={() => {
+                setShowEstimateReview(false);
+                setShowReport(true);
+              }}
+              onApprove={(services, totalCost) => {
+                // For now, just log and go back - can be extended to save to DB
+                console.log('Approved estimate:', { services, totalCost });
+                setShowEstimateReview(false);
+                setShowReport(false);
+                toast.success(`Estimate approved: $${totalCost.toFixed(2)}`);
+              }}
+            />
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   if (showReport && selectedRug) {
     return (
       <div className="min-h-screen bg-background">
@@ -586,6 +664,10 @@ const JobDetail = () => {
                 dimensions: `${selectedRug.length || '–'}' × ${selectedRug.width || '–'}'`,
               }}
               onNewInspection={() => setShowReport(false)}
+              onReviewEstimate={() => {
+                setShowReport(false);
+                setShowEstimateReview(true);
+              }}
             />
           </div>
         </main>

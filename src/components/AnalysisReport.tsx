@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, DollarSign, Wrench, ArrowLeft, Download } from 'lucide-react';
+import { FileText, DollarSign, Wrench, ArrowLeft, Download, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -14,6 +14,7 @@ interface AnalysisReportProps {
     dimensions: string;
   };
   onNewInspection: () => void;
+  onReviewEstimate?: () => void;
 }
 
 
@@ -21,6 +22,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
   report,
   rugInfo,
   onNewInspection,
+  onReviewEstimate,
 }) => {
   const handleDownloadPDF = async () => {
     try {
@@ -163,10 +165,17 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
           <Download className="h-4 w-4" />
           Download PDF Report
         </Button>
-        <Button variant="outline" size="lg" className="flex-1 gap-2">
-          <DollarSign className="h-4 w-4" />
-          Create Quote
-        </Button>
+        {onReviewEstimate && (
+          <Button 
+            variant="warm" 
+            size="lg" 
+            className="flex-1 gap-2"
+            onClick={onReviewEstimate}
+          >
+            <ClipboardList className="h-4 w-4" />
+            Review Estimate
+          </Button>
+        )}
       </div>
     </div>
   );
