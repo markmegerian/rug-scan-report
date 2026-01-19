@@ -365,15 +365,37 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
       )}
 
       {/* Analysis Report */}
-      <Card className="shadow-medium">
+      <Card className="shadow-medium overflow-hidden">
         <CardHeader className="border-b border-border bg-gradient-to-r from-primary/5 to-transparent">
           <CardTitle className="flex items-center gap-2 font-display">
             <Wrench className="h-5 w-5 text-primary" />
             Professional Estimate
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-6 px-6 md:px-8">
-          <div className="max-w-none space-y-1">
+        <CardContent 
+          className="pt-8 pb-10 px-8 md:px-12 relative"
+          style={{
+            background: `
+              linear-gradient(180deg, hsl(40 30% 97%) 0%, hsl(35 25% 95%) 100%),
+              repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                hsl(30 20% 90% / 0.3) 2px,
+                hsl(30 20% 90% / 0.3) 4px
+              )
+            `,
+            backgroundBlendMode: 'multiply',
+            boxShadow: 'inset 0 0 60px hsl(30 20% 85% / 0.4)',
+          }}
+        >
+          {/* Subtle corner flourishes */}
+          <div className="absolute top-4 left-4 w-8 h-8 border-t-2 border-l-2 border-primary/20 rounded-tl-sm" />
+          <div className="absolute top-4 right-4 w-8 h-8 border-t-2 border-r-2 border-primary/20 rounded-tr-sm" />
+          <div className="absolute bottom-4 left-4 w-8 h-8 border-b-2 border-l-2 border-primary/20 rounded-bl-sm" />
+          <div className="absolute bottom-4 right-4 w-8 h-8 border-b-2 border-r-2 border-primary/20 rounded-br-sm" />
+          
+          <div className="max-w-none space-y-1 relative z-10">
             {formatReport(report)}
           </div>
         </CardContent>
