@@ -51,6 +51,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
   const [localAnnotations, setLocalAnnotations] = useState<PhotoAnnotations[]>(imageAnnotations);
   const [editingMarker, setEditingMarker] = useState<{ photoIndex: number; annIndex: number } | null>(null);
   const [editLabel, setEditLabel] = useState('');
+  const [draggingMarker, setDraggingMarker] = useState<{ photoIndex: number; annIndex: number } | null>(null);
   const imageRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Sync local state when props change
@@ -138,6 +139,52 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
     setEditLabel('');
   };
 
+  const handleDragStart = (e: React.DragEvent, photoIndex: number, annIndex: number) => {
+    if (!editMode) return;
+    setDraggingMarker({ photoIndex, annIndex });
+    e.dataTransfer.effectAllowed = 'move';
+    // Set a transparent drag image
+    const dragImg = document.createElement('div');
+    dragImg.style.opacity = '0';
+    document.body.appendChild(dragImg);
+    e.dataTransfer.setDragImage(dragImg, 0, 0);
+    setTimeout(() => document.body.removeChild(dragImg), 0);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, photoIndex: number) => {
+    e.preventDefault();
+    if (!draggingMarker || draggingMarker.photoIndex !== photoIndex) {
+      setDraggingMarker(null);
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+    const updatedAnnotations = localAnnotations.map(pa => {
+      if (pa.photoIndex === photoIndex) {
+        return {
+          ...pa,
+          annotations: pa.annotations.map((ann, idx) =>
+            idx === draggingMarker.annIndex
+              ? { ...ann, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 }
+              : ann
+          ),
+        };
+      }
+      return pa;
+    });
+
+    setLocalAnnotations(updatedAnnotations);
+    setDraggingMarker(null);
+  };
+
   const handleSaveAnnotations = () => {
     if (onAnnotationsChange) {
       onAnnotationsChange(localAnnotations);
@@ -150,6 +197,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
     setLocalAnnotations(imageAnnotations);
     setEditMode(false);
     setEditingMarker(null);
+    setDraggingMarker(null);
   };
 
   const handleDownloadPDF = async () => {
@@ -438,7 +486,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
             {editMode && (
               <div className="mt-3 p-3 bg-primary/10 rounded-lg flex items-center gap-2 text-sm text-primary">
                 <MousePointer className="h-4 w-4" />
-                <span>Click anywhere on a photo to add a new marker. Click a marker to edit or delete it.</span>
+                <span>Click to add markers. Drag markers to reposition. Click a marker to edit or delete.</span>
               </div>
             )}
           </CardHeader>
@@ -459,6 +507,8 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
                       ref={el => imageRefs.current[photoIndex] = el}
                       className={`relative rounded-lg overflow-hidden border border-border ${editMode ? 'cursor-crosshair' : ''}`}
                       onClick={(e) => handleImageClick(e, photoIndex)}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, photoIndex)}
                     >
                       <img
                         src={url}
@@ -466,36 +516,40 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
                         className="w-full h-auto object-cover"
                       />
                       {/* Annotation markers */}
-                      {annotations.map((annotation, annIndex) => (
-                        <div
-                          key={annIndex}
-                          className="absolute"
-                          style={{
-                            left: `${annotation.x}%`,
-                            top: `${annotation.y}%`,
-                            transform: 'translate(-50%, -50%)',
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (editMode) {
-                              handleEditMarker(photoIndex, annIndex);
-                            }
-                          }}
-                        >
-                          {/* Marker dot */}
-                          <div className="relative group cursor-pointer">
-                            <div className={`w-6 h-6 bg-destructive rounded-full flex items-center justify-center text-destructive-foreground text-xs font-bold shadow-lg border-2 border-white ${editMode ? '' : 'animate-pulse'}`}>
-                              {annIndex + 1}
-                            </div>
-                            {/* Tooltip */}
-                            {!editMode && (
-                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10">
-                                <div className="bg-popover text-popover-foreground px-3 py-2 rounded-md shadow-lg text-sm whitespace-nowrap border border-border">
-                                  {annotation.label}
-                                </div>
+                      {annotations.map((annotation, annIndex) => {
+                        const isDragging = draggingMarker?.photoIndex === photoIndex && draggingMarker?.annIndex === annIndex;
+                        return (
+                          <div
+                            key={annIndex}
+                            className={`absolute transition-opacity ${isDragging ? 'opacity-50' : ''}`}
+                            style={{
+                              left: `${annotation.x}%`,
+                              top: `${annotation.y}%`,
+                              transform: 'translate(-50%, -50%)',
+                            }}
+                            draggable={editMode}
+                            onDragStart={(e) => handleDragStart(e, photoIndex, annIndex)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (editMode && !draggingMarker) {
+                                handleEditMarker(photoIndex, annIndex);
+                              }
+                            }}
+                          >
+                            {/* Marker dot */}
+                            <div className={`relative group ${editMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}>
+                              <div className={`w-6 h-6 bg-destructive rounded-full flex items-center justify-center text-destructive-foreground text-xs font-bold shadow-lg border-2 border-white ${editMode ? '' : 'animate-pulse'}`}>
+                                {annIndex + 1}
                               </div>
-                            )}
-                            {/* Edit mode tooltip with delete */}
+                              {/* Tooltip */}
+                              {!editMode && (
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10">
+                                  <div className="bg-popover text-popover-foreground px-3 py-2 rounded-md shadow-lg text-sm whitespace-nowrap border border-border">
+                                    {annotation.label}
+                                  </div>
+                                </div>
+                              )}
+                              {/* Edit mode tooltip with delete */}
                             {editMode && (
                               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex z-10 gap-1">
                                 <Button
@@ -522,9 +576,10 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
                                 </Button>
                               </div>
                             )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     {/* Annotation legend */}
                     {annotations.length > 0 && (
