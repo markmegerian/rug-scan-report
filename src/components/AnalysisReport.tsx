@@ -89,20 +89,20 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
     const flushLineItems = () => {
       if (lineItemsBuffer.length > 0) {
         elements.push(
-          <div key={`items-${elements.length}`} className="bg-muted/30 rounded-lg p-4 my-3 space-y-1">
+          <div key={`items-${elements.length}`} className="bg-muted/30 rounded-lg p-5 my-4 space-y-2">
             {lineItemsBuffer.map((item, idx) => {
               const isTotal = /total|subtotal/i.test(item);
               return (
                 <div
                   key={idx}
-                  className={`flex justify-between items-center ${
+                  className={`flex justify-between items-center text-base leading-relaxed ${
                     isTotal 
-                      ? 'border-t border-border pt-2 mt-2 font-semibold text-foreground' 
-                      : 'text-foreground/80'
+                      ? 'border-t border-border pt-3 mt-3 font-semibold text-foreground' 
+                      : 'text-foreground/85'
                   }`}
                 >
                   <span className="flex-1">{item.replace(/:\s*\$[\d,.]+$/, '')}</span>
-                  <span className={`font-mono ${isTotal ? 'text-lg text-primary' : 'text-sm'}`}>
+                  <span className={`font-mono ${isTotal ? 'text-xl text-primary' : 'text-base'}`}>
                     {item.match(/\$[\d,.]+/)?.[0] || ''}
                   </span>
                 </div>
@@ -128,8 +128,8 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
         flushLineItems();
         currentSection = trimmedLine;
         elements.push(
-          <div key={index} className="mt-8 first:mt-0">
-            <h3 className="font-display text-lg font-semibold text-foreground border-b border-primary/20 pb-2 mb-4">
+          <div key={index} className="mt-10 first:mt-0">
+            <h3 className="font-display text-xl font-semibold text-foreground border-b border-primary/20 pb-3 mb-5 tracking-wide">
               {trimmedLine.replace(/:$/, '')}
             </h3>
           </div>
@@ -141,7 +141,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
       if (trimmedLine.startsWith('Dear ')) {
         flushLineItems();
         elements.push(
-          <p key={index} className="text-foreground text-lg mb-4">
+          <p key={index} className="text-foreground text-xl leading-relaxed mb-6">
             {trimmedLine}
           </p>
         );
@@ -151,8 +151,8 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
       if (trimmedLine.startsWith('Sincerely') || trimmedLine.startsWith('Best regards')) {
         flushLineItems();
         elements.push(
-          <div key={index} className="mt-8 pt-4 border-t border-border">
-            <p className="text-foreground font-medium">{trimmedLine}</p>
+          <div key={index} className="mt-10 pt-6 border-t border-border">
+            <p className="text-foreground text-lg font-medium">{trimmedLine}</p>
           </div>
         );
         return;
@@ -165,7 +165,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
           const lastProps = (lastElement as React.ReactElement).props;
           if (lastProps?.children?.props?.children?.toString().includes('Sincerely')) {
             elements.push(
-              <p key={index} className="text-primary font-display font-semibold text-lg">
+              <p key={index} className="text-primary font-display font-semibold text-xl mt-2">
                 {trimmedLine}
               </p>
             );
@@ -178,8 +178,8 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
       if (/^Rug\s*#/i.test(trimmedLine)) {
         flushLineItems();
         elements.push(
-          <div key={index} className="mt-6 mb-3 p-3 bg-primary/5 rounded-lg border-l-4 border-primary">
-            <h4 className="font-display font-semibold text-foreground">
+          <div key={index} className="mt-8 mb-4 p-4 bg-primary/5 rounded-lg border-l-4 border-primary">
+            <h4 className="font-display text-lg font-semibold text-foreground">
               {trimmedLine}
             </h4>
           </div>
@@ -197,9 +197,9 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
       if (trimmedLine.startsWith('•')) {
         flushLineItems();
         elements.push(
-          <div key={index} className="flex items-start gap-3 ml-2 mb-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0" />
-            <span className="text-foreground/80 leading-relaxed">
+          <div key={index} className="flex items-start gap-3 ml-3 mb-3">
+            <span className="w-2 h-2 rounded-full bg-primary mt-2.5 flex-shrink-0" />
+            <span className="text-foreground/85 text-base leading-relaxed">
               {trimmedLine.replace(/^•\s*/, '')}
             </span>
           </div>
@@ -210,7 +210,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
       // Regular paragraphs
       flushLineItems();
       elements.push(
-        <p key={index} className="text-foreground/80 leading-relaxed mb-3">
+        <p key={index} className="text-foreground/85 text-base leading-[1.8] mb-4">
           {line}
         </p>
       );
