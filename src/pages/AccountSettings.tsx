@@ -192,8 +192,8 @@ const AccountSettings = () => {
       return;
     }
 
-    if (passwordData.newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    if (passwordData.newPassword.length < 12) {
+      toast.error("Password must be at least 12 characters");
       return;
     }
 
