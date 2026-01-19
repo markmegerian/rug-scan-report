@@ -139,50 +139,43 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
     setEditLabel('');
   };
 
-  const handleDragStart = (e: React.DragEvent, photoIndex: number, annIndex: number) => {
+  const handleMouseDown = (e: React.MouseEvent, photoIndex: number, annIndex: number) => {
     if (!editMode) return;
+    e.preventDefault();
+    e.stopPropagation();
     setDraggingMarker({ photoIndex, annIndex });
-    e.dataTransfer.effectAllowed = 'move';
-    // Set a transparent drag image
-    const dragImg = document.createElement('div');
-    dragImg.style.opacity = '0';
-    document.body.appendChild(dragImg);
-    e.dataTransfer.setDragImage(dragImg, 0, 0);
-    setTimeout(() => document.body.removeChild(dragImg), 0);
-  };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
+    const imageEl = imageRefs.current[photoIndex];
+    if (!imageEl) return;
 
-  const handleDrop = (e: React.DragEvent, photoIndex: number) => {
-    e.preventDefault();
-    if (!draggingMarker || draggingMarker.photoIndex !== photoIndex) {
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const rect = imageEl.getBoundingClientRect();
+      const x = Math.max(0, Math.min(100, ((moveEvent.clientX - rect.left) / rect.width) * 100));
+      const y = Math.max(0, Math.min(100, ((moveEvent.clientY - rect.top) / rect.height) * 100));
+
+      setLocalAnnotations(prev => prev.map(pa => {
+        if (pa.photoIndex === photoIndex) {
+          return {
+            ...pa,
+            annotations: pa.annotations.map((ann, idx) =>
+              idx === annIndex
+                ? { ...ann, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 }
+                : ann
+            ),
+          };
+        }
+        return pa;
+      }));
+    };
+
+    const handleMouseUp = () => {
       setDraggingMarker(null);
-      return;
-    }
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-
-    const updatedAnnotations = localAnnotations.map(pa => {
-      if (pa.photoIndex === photoIndex) {
-        return {
-          ...pa,
-          annotations: pa.annotations.map((ann, idx) =>
-            idx === draggingMarker.annIndex
-              ? { ...ann, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 }
-              : ann
-          ),
-        };
-      }
-      return pa;
-    });
-
-    setLocalAnnotations(updatedAnnotations);
-    setDraggingMarker(null);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
   };
 
   const handleSaveAnnotations = () => {
@@ -505,15 +498,14 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
                     </p>
                     <div 
                       ref={el => imageRefs.current[photoIndex] = el}
-                      className={`relative rounded-lg overflow-hidden border border-border ${editMode ? 'cursor-crosshair' : ''}`}
+                      className={`relative rounded-lg overflow-hidden border border-border ${editMode ? 'cursor-crosshair' : ''} select-none`}
                       onClick={(e) => handleImageClick(e, photoIndex)}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, photoIndex)}
                     >
                       <img
                         src={url}
                         alt={`Rug photo ${photoIndex + 1}`}
-                        className="w-full h-auto object-cover"
+                        className="w-full h-auto object-cover pointer-events-none"
+                        draggable={false}
                       />
                       {/* Annotation markers */}
                       {annotations.map((annotation, annIndex) => {
@@ -521,14 +513,14 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
                         return (
                           <div
                             key={annIndex}
-                            className={`absolute transition-opacity ${isDragging ? 'opacity-50' : ''}`}
+                            className={`absolute ${isDragging ? 'z-50 scale-110' : 'z-10'}`}
                             style={{
                               left: `${annotation.x}%`,
                               top: `${annotation.y}%`,
                               transform: 'translate(-50%, -50%)',
+                              transition: isDragging ? 'none' : 'all 0.15s ease-out',
                             }}
-                            draggable={editMode}
-                            onDragStart={(e) => handleDragStart(e, photoIndex, annIndex)}
+                            onMouseDown={(e) => handleMouseDown(e, photoIndex, annIndex)}
                             onClick={(e) => {
                               e.stopPropagation();
                               if (editMode && !draggingMarker) {
