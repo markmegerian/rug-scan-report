@@ -125,7 +125,7 @@ const Auth = () => {
       <main className="flex-1 flex items-center justify-center px-4 py-12">
         <Card className="w-full max-w-md shadow-medium">
           <CardHeader className="text-center">
-            <CardTitle className="font-display text-2xl">Welcome</CardTitle>
+            <h2 className="text-2xl font-semibold leading-none tracking-tight font-display">Welcome</h2>
             <CardDescription>Sign in to your account or create a new one</CardDescription>
           </CardHeader>
           <CardContent>
