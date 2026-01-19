@@ -54,22 +54,11 @@ function isValidBase64(str: string): boolean {
   return /^[A-Za-z0-9+/=]+$/.test(str);
 }
 
-// Allowed origins for CORS - restricts to known application domains
-const ALLOWED_ORIGINS = [
-  "https://rug-scan-report.lovable.app",
-  "https://id-preview--fef72b1b-d121-4ff6-bcc3-c957ca919cde.lovable.app",
-  "https://fef72b1b-d121-4ff6-bcc3-c957ca919cde.lovableproject.com",
-  "https://sandbox.gmit.io",
-  Deno.env.get("APP_ORIGIN") || ""
-].filter(Boolean);
-
-const getCorsHeaders = (req: Request) => {
-  const origin = req.headers.get("Origin") || "";
-  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    "Access-Control-Allow-Origin": allowedOrigin,
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  };
+// CORS headers - allow all origins for mobile browser compatibility
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 // Input validation schema with stricter constraints and sanitization
@@ -101,7 +90,7 @@ function escapeHtml(text: string): string {
 }
 
 const handler = async (req: Request): Promise<Response> => {
-  const corsHeaders = getCorsHeaders(req);
+  
   
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -251,7 +240,7 @@ const handler = async (req: Request): Promise<Response> => {
     console.error("Error:", error.message);
     return new Response(
       JSON.stringify({ error: error.message }),
-      { status: 500, headers: { "Content-Type": "application/json", ...getCorsHeaders(req) } }
+      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   }
 };
