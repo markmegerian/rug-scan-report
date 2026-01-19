@@ -65,16 +65,68 @@ const COLORS = {
 // Default RugBoost logo as base64 PNG (fallback when no custom logo)
 const RUGBOOST_LOGO_BASE64 = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2MDAgODkwIiBmaWxsPSJub25lIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZ3JhZCIgeDE9IjAlIiB5MT0iMjAlIiB4Mj0iMTAwJSIgeTI9IjgwJSI+CiAgICAgIDxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiMyMTc0QzYiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjNkU1NEQxIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8cGF0aCBkPSJNMTIwIDQ0NUMxMjAgMzY4IDI2My41NyAyNDMuNTcgMzAwIDE2MCAzNTQuMjMgMjIzLjkgNDc0IDM2MiA0ODAgNDQ1IDQ4MCA1MjAgNDIwIDY5MCAzMDAgNjkwIDE4MCA2OTAgMTIwIDUyMCAxMjAgNDQ1WiIgZmlsbD0idXJsKCNncmFkKSIvPgogIDxwYXRoIGQ9Ik0yMDAgNDYwQzIwMCAzNjAgMzQwIDMwMCAzMDAgMjIwIDI2MCAzMDAgNDAwIDM2MCA0MDAgNDYwIDQwMCA1NjAgMzIwIDYyMCAzMDAgNjIwIDI4MCA2MjAgMjAwIDU2MCAyMDAgNDYwWiIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iMC4zIi8+Cjwvc3ZnPg==`;
 
-// Helper function to load image and convert to base64
-const loadImageAsBase64 = async (url: string): Promise<string | null> => {
+// Helper function to compress and convert image to base64
+const compressImage = (
+  img: HTMLImageElement,
+  maxWidth: number = 800,
+  maxHeight: number = 600,
+  quality: number = 0.7
+): string => {
+  const canvas = document.createElement('canvas');
+  let { width, height } = img;
+  
+  // Calculate new dimensions while maintaining aspect ratio
+  if (width > maxWidth) {
+    height = (height * maxWidth) / width;
+    width = maxWidth;
+  }
+  if (height > maxHeight) {
+    width = (width * maxHeight) / height;
+    height = maxHeight;
+  }
+  
+  canvas.width = width;
+  canvas.height = height;
+  
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+  
+  ctx.drawImage(img, 0, 0, width, height);
+  return canvas.toDataURL('image/jpeg', quality);
+};
+
+// Helper function to load image, compress it, and convert to base64
+const loadImageAsBase64 = async (url: string, compress: boolean = true): Promise<string | null> => {
   try {
     const response = await fetch(url);
     const blob = await response.blob();
+    
+    if (!compress) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    }
+    
+    // Compress images for smaller PDF size
     return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const compressed = compressImage(img, 800, 600, 0.65);
+          resolve(compressed || null);
+        } catch (e) {
+          console.error('Compression failed, using original:', e);
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        }
+      };
+      img.onerror = () => resolve(null);
+      img.src = URL.createObjectURL(blob);
     });
   } catch (error) {
     console.error('Failed to load image:', url, error);
