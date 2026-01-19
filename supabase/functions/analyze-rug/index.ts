@@ -71,6 +71,10 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Supported AI models for rug analysis
+const SUPPORTED_MODELS = ["google/gemini-2.5-pro", "google/gemini-2.5-flash"] as const;
+type SupportedModel = typeof SUPPORTED_MODELS[number];
+
 // Input validation schema with stricter constraints
 const RequestSchema = z.object({
   photos: z.array(z.string().url().refine(isValidPhotoUrl, { message: "Invalid photo URL domain" })).min(1).max(20),
@@ -82,7 +86,8 @@ const RequestSchema = z.object({
     width: z.union([z.string().max(20), z.number().min(0).max(1000)]).optional(),
     notes: z.string().max(5000).optional().nullable().transform(val => val ? sanitizeString(val) : val)
   }),
-  userId: z.string().uuid().optional()
+  userId: z.string().uuid().optional(),
+  model: z.enum(SUPPORTED_MODELS).optional().default("google/gemini-2.5-pro")
 });
 
 // Dynamic system prompt that includes business name
@@ -327,7 +332,7 @@ serve(async (req) => {
       );
     }
 
-    const { photos, rugInfo, userId } = validationResult.data;
+    const { photos, rugInfo, userId, model } = validationResult.data;
 
     // Ensure the userId matches the authenticated user (if provided)
     const effectiveUserId = userId || authenticatedUserId;
@@ -339,7 +344,7 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    console.log(`Analyzing rug inspection for ${rugInfo.rugNumber} with ${photos.length} photos using Gemini`);
+    console.log(`Analyzing rug inspection for ${rugInfo.rugNumber} with ${photos.length} photos using ${model}`);
 
     // Fetch user's service prices and business info using service role key
     let servicePricesText = "";
@@ -393,11 +398,13 @@ serve(async (req) => {
     const squareFootage = length * width;
 
     // Build the image content array for Gemini vision
+    // Use "high" detail for Pro model, "low" for Flash to optimize speed/cost
+    const imageDetail = model === "google/gemini-2.5-flash" ? "low" : "high";
     const imageContent = photos.map((photoUrl: string) => ({
       type: "image_url",
       image_url: {
         url: photoUrl,
-        detail: "high",
+        detail: imageDetail,
       },
     }));
 
@@ -418,7 +425,11 @@ ${servicePricesText}
 
 Please examine the attached ${photos.length} photograph(s) and write a professional estimate letter following the format specified. Address it to the client by name. Calculate all costs based on the rug's square footage (${squareFootage} sq ft) and perimeter for linear services.`;
 
-    // Use Lovable AI Gateway with Gemini
+    // Use Lovable AI Gateway with selected model
+    // Reduce max_tokens for Flash model since it's more concise
+    const maxTokens = model === "google/gemini-2.5-flash" ? 5000 : 8000;
+    const startTime = Date.now();
+    
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -426,8 +437,8 @@ Please examine the attached ${photos.length} photograph(s) and write a professio
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        max_tokens: 8000,
+        model: model,
+        max_tokens: maxTokens,
         messages: [
           {
             role: "system",
@@ -443,6 +454,8 @@ Please examine the attached ${photos.length} photograph(s) and write a professio
         ],
       }),
     });
+    
+    const processingTimeMs = Date.now() - startTime;
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -520,7 +533,9 @@ Please examine the attached ${photos.length} photograph(s) and write a professio
 
     return new Response(JSON.stringify({ 
       report: analysisReport,
-      imageAnnotations: imageAnnotations
+      imageAnnotations: imageAnnotations,
+      modelUsed: model,
+      processingTimeMs: processingTimeMs
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { 
   ArrowLeft, Plus, Loader2, Eye, Download, Trash2, 
-  Edit2, FileText, CheckCircle, Clock, PlayCircle, Sparkles, FolderOpen, Mail
+  Edit2, FileText, CheckCircle, Clock, PlayCircle, Sparkles, FolderOpen, Mail, FlaskConical
 } from 'lucide-react';
 import rugboostLogo from '@/assets/rugboost-logo.svg';
 import { toast } from 'sonner';
@@ -24,6 +24,7 @@ import AnalysisReport from '@/components/AnalysisReport';
 import EmailPreviewDialog from '@/components/EmailPreviewDialog';
 import EstimateReview from '@/components/EstimateReview';
 import AnalysisProgress, { AnalysisStage } from '@/components/AnalysisProgress';
+import { ModelComparisonDialog } from '@/components/ModelComparisonDialog';
 
 interface Job {
   id: string;
@@ -83,6 +84,8 @@ const JobDetail = () => {
   const [analysisRugNumber, setAnalysisRugNumber] = useState<string>('');
   const [analysisCurrent, setAnalysisCurrent] = useState<number>(0);
   const [analysisTotal, setAnalysisTotal] = useState<number>(0);
+  const [compareRug, setCompareRug] = useState<Rug | null>(null);
+  const [showCompareDialog, setShowCompareDialog] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -1083,15 +1086,29 @@ const JobDetail = () => {
                               </Button>
                             </>
                           ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => analyzeRug(rug)}
-                              disabled={!!analyzingRugId || analyzingAll}
-                              title="Analyze Rug"
-                            >
-                              <Sparkles className="h-4 w-4" />
-                            </Button>
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => analyzeRug(rug)}
+                                disabled={!!analyzingRugId || analyzingAll}
+                                title="Analyze Rug"
+                              >
+                                <Sparkles className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setCompareRug(rug);
+                                  setShowCompareDialog(true);
+                                }}
+                                disabled={!!analyzingRugId || analyzingAll}
+                                title="Compare AI Models"
+                              >
+                                <FlaskConical className="h-4 w-4" />
+                              </Button>
+                            </>
                           )}
                           <Button
                             variant="ghost"
@@ -1146,6 +1163,37 @@ const JobDetail = () => {
           }))}
           businessName={branding?.business_name || undefined}
           isSending={sendingEmail}
+        />
+      )}
+      
+      {/* Model Comparison Dialog */}
+      {compareRug && job && (
+        <ModelComparisonDialog
+          open={showCompareDialog}
+          onOpenChange={setShowCompareDialog}
+          rug={compareRug}
+          clientName={job.client_name}
+          userId={user?.id}
+          onSelectModel={async (model, report, annotations) => {
+            try {
+              // Save the selected analysis to the database
+              const { error } = await supabase
+                .from('inspections')
+                .update({ 
+                  analysis_report: report,
+                  image_annotations: annotations
+                })
+                .eq('id', compareRug.id);
+
+              if (error) throw error;
+              
+              toast.success(`Analysis saved for ${compareRug.rug_number}`);
+              fetchJobDetails();
+            } catch (error) {
+              console.error('Failed to save analysis:', error);
+              toast.error('Failed to save analysis');
+            }
+          }}
         />
       )}
       </div>
