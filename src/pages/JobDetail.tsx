@@ -75,6 +75,7 @@ const JobDetail = () => {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [showEmailPreview, setShowEmailPreview] = useState(false);
   const [servicePrices, setServicePrices] = useState<{ name: string; unitPrice: number }[]>([]);
+  const [imageAnnotations, setImageAnnotations] = useState<any[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -342,6 +343,11 @@ const JobDetail = () => {
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
+      // Store image annotations if provided
+      if (data.imageAnnotations) {
+        setImageAnnotations(data.imageAnnotations);
+      }
+
       // Update the rug with analysis
       const { error: updateError } = await supabase
         .from('inspections')
@@ -391,6 +397,11 @@ const JobDetail = () => {
 
       if (error) throw error;
       if (data.error) throw new Error(data.error);
+
+      // Store image annotations if provided
+      if (data.imageAnnotations) {
+        setImageAnnotations(data.imageAnnotations);
+      }
 
       // Update the rug with new analysis
       const { error: updateError } = await supabase
@@ -717,6 +728,8 @@ const JobDetail = () => {
                 rugType: selectedRug.rug_type,
                 dimensions: `${selectedRug.length || '–'}' × ${selectedRug.width || '–'}'`,
               }}
+              photoUrls={selectedRug.photo_urls || []}
+              imageAnnotations={imageAnnotations}
               onNewInspection={() => setShowReport(false)}
               onReviewEstimate={() => {
                 setShowReport(false);

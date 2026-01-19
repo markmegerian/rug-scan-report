@@ -1,9 +1,21 @@
 import React from 'react';
-import { FileText, DollarSign, Wrench, ArrowLeft, Download, ClipboardList, RefreshCw } from 'lucide-react';
+import { FileText, DollarSign, Wrench, ArrowLeft, Download, ClipboardList, RefreshCw, ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { generatePDF } from '@/lib/pdfGenerator';
+
+interface ImageAnnotation {
+  label: string;
+  location: string;
+  x: number;
+  y: number;
+}
+
+interface PhotoAnnotations {
+  photoIndex: number;
+  annotations: ImageAnnotation[];
+}
 
 interface AnalysisReportProps {
   report: string;
@@ -13,6 +25,8 @@ interface AnalysisReportProps {
     rugType: string;
     dimensions: string;
   };
+  photoUrls?: string[];
+  imageAnnotations?: PhotoAnnotations[];
   onNewInspection: () => void;
   onReviewEstimate?: () => void;
   onReanalyze?: () => void;
@@ -23,6 +37,8 @@ interface AnalysisReportProps {
 const AnalysisReport: React.FC<AnalysisReportProps> = ({
   report,
   rugInfo,
+  photoUrls = [],
+  imageAnnotations = [],
   onNewInspection,
   onReviewEstimate,
   onReanalyze,
@@ -191,6 +207,91 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
           </div>
         </CardContent>
       </Card>
+
+      {/* Annotated Photos */}
+      {photoUrls.length > 0 && (
+        <Card className="shadow-medium">
+          <CardHeader className="border-b border-border">
+            <CardTitle className="flex items-center gap-2 font-display">
+              <ImageIcon className="h-5 w-5 text-primary" />
+              Photo Analysis
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {photoUrls.map((url, photoIndex) => {
+                const photoAnnotation = imageAnnotations.find(
+                  (a) => a.photoIndex === photoIndex
+                );
+                const annotations = photoAnnotation?.annotations || [];
+
+                return (
+                  <div key={photoIndex} className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Photo {photoIndex + 1}
+                    </p>
+                    <div className="relative rounded-lg overflow-hidden border border-border">
+                      <img
+                        src={url}
+                        alt={`Rug photo ${photoIndex + 1}`}
+                        className="w-full h-auto object-cover"
+                      />
+                      {/* Annotation markers */}
+                      {annotations.map((annotation, annIndex) => (
+                        <div
+                          key={annIndex}
+                          className="absolute"
+                          style={{
+                            left: `${annotation.x}%`,
+                            top: `${annotation.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                          }}
+                        >
+                          {/* Marker dot */}
+                          <div className="relative group cursor-pointer">
+                            <div className="w-6 h-6 bg-destructive rounded-full flex items-center justify-center text-destructive-foreground text-xs font-bold shadow-lg border-2 border-white animate-pulse">
+                              {annIndex + 1}
+                            </div>
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10">
+                              <div className="bg-popover text-popover-foreground px-3 py-2 rounded-md shadow-lg text-sm whitespace-nowrap border border-border">
+                                {annotation.label}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Annotation legend */}
+                    {annotations.length > 0 && (
+                      <div className="space-y-1 mt-2">
+                        {annotations.map((annotation, annIndex) => (
+                          <div
+                            key={annIndex}
+                            className="flex items-start gap-2 text-sm"
+                          >
+                            <span className="w-5 h-5 bg-destructive rounded-full flex items-center justify-center text-destructive-foreground text-xs font-bold flex-shrink-0">
+                              {annIndex + 1}
+                            </span>
+                            <span className="text-foreground/80">
+                              {annotation.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {annotations.length === 0 && (
+                      <p className="text-xs text-muted-foreground italic">
+                        No specific issues identified in this photo
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Analysis Report */}
       <Card className="shadow-medium">

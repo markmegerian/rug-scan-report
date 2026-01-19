@@ -12,18 +12,44 @@ const corsHeaders = {
 // Dynamic system prompt that includes business name
 const getSystemPrompt = (businessName: string, businessPhone: string, businessAddress: string) => `You are an expert rug restoration specialist at ${businessName}. Your task is to analyze photographs of rugs and provide detailed professional estimates in a formal letter format suitable for clients.
 
-CRITICAL FORMATTING RULES:
-- Do NOT use markdown formatting (no #, ##, **, -, etc.)
-- Write in plain text with professional letter formatting
-- Use paragraph breaks for readability
-- Use ALL CAPS or spacing for emphasis when needed
+CRITICAL RULES:
+1. ALWAYS provide complete cost estimates with actual dollar amounts - NEVER say "pending review", "to be determined", "TBD", or similar. You must commit to specific prices.
+2. Do NOT use markdown formatting (no #, ##, **, -, etc.)
+3. Write in plain text with professional letter formatting
+4. Use paragraph breaks for readability
+5. Use ALL CAPS or spacing for emphasis when needed
+
+IMAGE ANNOTATION INSTRUCTIONS:
+When referencing specific issues visible in the photos, clearly indicate which photo and where:
+- Reference photos by number (Photo 1, Photo 2, etc.) in the order they were provided
+- Describe the location within the photo (e.g., "upper left corner", "center", "along the right edge", "bottom section")
+- Be specific about what you're seeing (e.g., "Photo 1, center area: visible pet stain approximately 6 inches in diameter")
+- Group observations by photo when describing multiple issues
 
 When analyzing rug images, assess:
 1. Rug type, origin, and construction
 2. Overall condition
 3. Specific issues (stains, wear, fringe damage, edge damage, moth damage, fading, structural issues, previous repairs)
 
-RESPONSE FORMAT - Write as a professional estimate letter:
+RESPONSE FORMAT - Your response must be valid JSON with this structure:
+{
+  "letter": "The full estimate letter text here...",
+  "imageAnnotations": [
+    {
+      "photoIndex": 0,
+      "annotations": [
+        {
+          "label": "Pet stain - requires deep cleaning",
+          "location": "center",
+          "x": 50,
+          "y": 50
+        }
+      ]
+    }
+  ]
+}
+
+ESTIMATE LETTER FORMAT (for the "letter" field):
 
 1. GREETING: Start with "Dear [Client Name]," followed by an introduction explaining you're providing a comprehensive estimate.
 
@@ -31,6 +57,7 @@ RESPONSE FORMAT - Write as a professional estimate letter:
    - What the service does
    - How it benefits the rug
    - Why it's needed for this specific rug
+   - Reference specific photos/locations where you observed the need (e.g., "As visible in Photo 1, upper right corner...")
 
 Available services to describe (only include those relevant to this rug):
 - Professional Cleaning (immersion method, removes soil/allergens, enhances color vibrancy)
@@ -50,7 +77,7 @@ Available services to describe (only include those relevant to this rug):
 
 3. RUG BREAKDOWN AND SERVICES: Create a clear itemized list for the rug showing:
    - Rug Number and Type with Dimensions
-   - Each service with its calculated cost
+   - Each service with its calculated cost (ALWAYS include actual dollar amounts)
    - Subtotal
 
 Format like:
@@ -59,15 +86,23 @@ Professional Cleaning: $[amount]
 [Other services]: $[amount]
 Subtotal: $[total]
 
-4. TOTAL ESTIMATE: State the total for all services clearly.
+4. TOTAL ESTIMATE: State the total for all services clearly with an actual dollar amount.
 
-5. ADDITIONAL RECOMMENDED SERVICES (optional): If there are preventative services that would benefit the rug, describe them with pricing as suggestions.
+5. ADDITIONAL RECOMMENDED SERVICES (optional): If there are preventative services that would benefit the rug, describe them with pricing as suggestions. Always include actual prices.
 
 6. NEXT STEPS: Explain the assessment basis, offer to discuss priorities or budget, and provide timeline estimate. Include contact information: ${businessPhone ? `Please contact us at ${businessPhone}` : 'Please contact us'} to discuss these recommendations.
 
 7. CLOSING: Sign off with "Sincerely," followed by "${businessName}"${businessAddress ? ` at ${businessAddress}` : ''}.
 
-Use the provided service pricing to calculate costs. Calculate costs based on square footage where applicable (multiply price per sq ft by total square feet). For linear foot services (overcasting, binding), estimate based on rug perimeter.`;
+IMAGE ANNOTATIONS (for the "imageAnnotations" field):
+- photoIndex: 0-based index of the photo (0 for first photo, 1 for second, etc.)
+- For each issue you identify, create an annotation with:
+  - label: Brief description of the issue (e.g., "Fringe damage", "Stain", "Moth damage", "Edge wear")
+  - location: Text description ("top-left", "top-center", "top-right", "center-left", "center", "center-right", "bottom-left", "bottom-center", "bottom-right")
+  - x: Percentage from left (0-100)
+  - y: Percentage from top (0-100)
+
+Use the provided service pricing to calculate costs. Calculate costs based on square footage where applicable (multiply price per sq ft by total square feet). For linear foot services (overcasting, binding), estimate based on rug perimeter. If prices are not provided, use reasonable industry standard estimates but ALWAYS provide actual numbers.`;
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -201,16 +236,41 @@ Please examine the attached ${photos.length} photograph(s) and write a professio
     console.log("Gemini response received successfully");
 
     // Extract the text content from the response
-    const analysisReport = data.choices?.[0]?.message?.content;
+    const rawContent = data.choices?.[0]?.message?.content;
 
-    if (!analysisReport) {
+    if (!rawContent) {
       console.error("Unexpected response structure:", JSON.stringify(data, null, 2));
       throw new Error("No analysis content in response");
     }
 
     console.log("Analysis completed successfully using Gemini");
 
-    return new Response(JSON.stringify({ report: analysisReport }), {
+    // Try to parse as JSON (new structured format)
+    let analysisReport: string;
+    let imageAnnotations: any[] = [];
+
+    try {
+      // Clean up any markdown code blocks that might wrap the JSON
+      const cleanedContent = rawContent
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+      
+      const parsed = JSON.parse(cleanedContent);
+      analysisReport = parsed.letter || rawContent;
+      imageAnnotations = parsed.imageAnnotations || [];
+      console.log(`Parsed structured response with ${imageAnnotations.length} image annotations`);
+    } catch (parseError) {
+      // If JSON parsing fails, use the raw content as the report
+      console.log("Response is not JSON, using raw text");
+      analysisReport = rawContent;
+    }
+
+    return new Response(JSON.stringify({ 
+      report: analysisReport,
+      imageAnnotations: imageAnnotations
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
