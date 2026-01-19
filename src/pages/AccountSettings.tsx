@@ -128,7 +128,8 @@ const AccountSettings = () => {
     try {
       const fileExt = file.name.split(".").pop();
       const fileName = `${user!.id}-logo-${Date.now()}.${fileExt}`;
-      const filePath = `logos/${fileName}`;
+      // Include user ID in path for user-scoped storage policies
+      const filePath = `${user!.id}/logos/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from("rug-photos")
