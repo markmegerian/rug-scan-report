@@ -139,16 +139,19 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
     setEditLabel('');
   };
 
-  const handleMouseDown = (e: React.MouseEvent, photoIndex: number, annIndex: number) => {
+  const handlePointerDown = (e: React.PointerEvent, photoIndex: number, annIndex: number) => {
     if (!editMode) return;
     e.preventDefault();
     e.stopPropagation();
+    
+    // Capture the pointer for smooth tracking
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
     setDraggingMarker({ photoIndex, annIndex });
 
     const imageEl = imageRefs.current[photoIndex];
     if (!imageEl) return;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const handlePointerMove = (moveEvent: PointerEvent) => {
       const rect = imageEl.getBoundingClientRect();
       const x = Math.max(0, Math.min(100, ((moveEvent.clientX - rect.left) / rect.width) * 100));
       const y = Math.max(0, Math.min(100, ((moveEvent.clientY - rect.top) / rect.height) * 100));
@@ -168,14 +171,17 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
       }));
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = (upEvent: PointerEvent) => {
+      (upEvent.target as HTMLElement).releasePointerCapture?.(upEvent.pointerId);
       setDraggingMarker(null);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('pointercancel', handlePointerUp);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+    document.addEventListener('pointercancel', handlePointerUp);
   };
 
   const handleSaveAnnotations = () => {
@@ -519,8 +525,9 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
                               top: `${annotation.y}%`,
                               transform: 'translate(-50%, -50%)',
                               transition: isDragging ? 'none' : 'all 0.15s ease-out',
+                              touchAction: 'none',
                             }}
-                            onMouseDown={(e) => handleMouseDown(e, photoIndex, annIndex)}
+                            onPointerDown={(e) => handlePointerDown(e, photoIndex, annIndex)}
                             onClick={(e) => {
                               e.stopPropagation();
                               if (editMode && !draggingMarker) {
@@ -528,46 +535,46 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
                               }
                             }}
                           >
-                            {/* Marker dot */}
+                            {/* Marker dot - larger touch target for mobile */}
                             <div className={`relative group ${editMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}>
-                              <div className={`w-6 h-6 bg-destructive rounded-full flex items-center justify-center text-destructive-foreground text-xs font-bold shadow-lg border-2 border-white ${editMode ? '' : 'animate-pulse'}`}>
+                              <div className={`w-7 h-7 sm:w-6 sm:h-6 bg-destructive rounded-full flex items-center justify-center text-destructive-foreground text-xs font-bold shadow-lg border-2 border-white ${editMode ? 'ring-2 ring-primary/50' : 'animate-pulse'}`}>
                                 {annIndex + 1}
                               </div>
-                              {/* Tooltip */}
+                              {/* Tooltip - hidden on touch devices in non-edit mode */}
                               {!editMode && (
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10">
-                                  <div className="bg-popover text-popover-foreground px-3 py-2 rounded-md shadow-lg text-sm whitespace-nowrap border border-border">
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden md:group-hover:block z-10 pointer-events-none">
+                                  <div className="bg-popover text-popover-foreground px-3 py-2 rounded-md shadow-lg text-sm whitespace-nowrap border border-border max-w-[200px] truncate">
                                     {annotation.label}
                                   </div>
                                 </div>
                               )}
-                              {/* Edit mode tooltip with delete */}
-                            {editMode && (
-                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex z-10 gap-1">
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEditMarker(photoIndex, annIndex);
-                                  }}
-                                >
-                                  <Edit2 className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteMarker(photoIndex, annIndex);
-                                  }}
-                                >
-                                  <X className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            )}
+                              {/* Edit mode controls - always visible on touch when marker is active */}
+                              {editMode && (
+                                <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex z-20 gap-1 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity bg-background/90 backdrop-blur-sm rounded-lg p-1 shadow-lg border border-border">
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 touch-manipulation"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditMarker(photoIndex, annIndex);
+                                    }}
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 touch-manipulation"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteMarker(photoIndex, annIndex);
+                                    }}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );

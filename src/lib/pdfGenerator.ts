@@ -2,7 +2,19 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 
-interface Inspection {
+export interface ImageAnnotation {
+  label: string;
+  location: string;
+  x: number;
+  y: number;
+}
+
+export interface PhotoAnnotations {
+  photoIndex: number;
+  annotations: ImageAnnotation[];
+}
+
+export interface Inspection {
   id: string;
   client_name: string;
   client_email: string | null;
@@ -15,6 +27,7 @@ interface Inspection {
   photo_urls: string[] | null;
   analysis_report: string | null;
   created_at: string;
+  image_annotations?: PhotoAnnotations[] | unknown | null;
 }
 
 interface Job {
@@ -396,7 +409,7 @@ const addFormattedAnalysis = (
   return yPos;
 };
 
-// Helper to add photos to PDF
+// Helper to add photos to PDF with annotations
 const addPhotosToPDF = async (
   doc: jsPDF,
   photoUrls: string[],
@@ -405,55 +418,126 @@ const addPhotosToPDF = async (
   pageWidth: number,
   pageHeight: number,
   branding?: BusinessBranding | null,
-  cachedLogoBase64?: string | null
+  cachedLogoBase64?: string | null,
+  imageAnnotations?: PhotoAnnotations[] | unknown | null
 ): Promise<number> => {
   let yPos = startY;
+  
+  // Safely parse annotations
+  const annotations: PhotoAnnotations[] = Array.isArray(imageAnnotations) ? imageAnnotations : [];
   
   yPos = addSectionHeader(doc, 'Inspection Photos', yPos, margin);
   yPos += 5;
   
   const photoWidth = 85;
   const photoHeight = 65;
-  const photosPerRow = 2;
   const spacing = 10;
   
-  let currentX = margin;
-  let photosInRow = 0;
-  
-  for (const url of photoUrls) {
-    if (yPos + photoHeight > pageHeight - 30) {
+  for (let photoIndex = 0; photoIndex < photoUrls.length; photoIndex++) {
+    const url = photoUrls[photoIndex];
+    const photoAnnotation = annotations.find(a => a.photoIndex === photoIndex);
+    const photoMarkers = photoAnnotation?.annotations || [];
+    
+    // Calculate required space: photo + annotations legend
+    const legendHeight = photoMarkers.length > 0 ? Math.min(photoMarkers.length * 6 + 8, 40) : 0;
+    const totalBlockHeight = photoHeight + legendHeight + 10;
+    
+    if (yPos + totalBlockHeight > pageHeight - 30) {
       doc.addPage();
       yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
-      currentX = margin;
-      photosInRow = 0;
     }
     
     try {
       const base64 = await loadImageAsBase64(url);
       if (base64) {
+        // Photo label
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...COLORS.textMuted);
+        doc.text(`Photo ${photoIndex + 1}`, margin, yPos);
+        yPos += 5;
+        
         // Photo frame
         doc.setDrawColor(...COLORS.border);
         doc.setLineWidth(0.5);
-        doc.rect(currentX - 1, yPos - 1, photoWidth + 2, photoHeight + 2);
+        doc.rect(margin - 1, yPos - 1, photoWidth + 2, photoHeight + 2);
         
-        doc.addImage(base64, 'JPEG', currentX, yPos, photoWidth, photoHeight);
+        doc.addImage(base64, 'JPEG', margin, yPos, photoWidth, photoHeight);
         
-        photosInRow++;
-        if (photosInRow >= photosPerRow) {
-          yPos += photoHeight + spacing;
-          currentX = margin;
-          photosInRow = 0;
-        } else {
-          currentX += photoWidth + spacing;
+        // Draw markers on the photo
+        if (photoMarkers.length > 0) {
+          for (let i = 0; i < photoMarkers.length; i++) {
+            const marker = photoMarkers[i];
+            const markerX = margin + (marker.x / 100) * photoWidth;
+            const markerY = yPos + (marker.y / 100) * photoHeight;
+            
+            // Red marker circle with white border
+            doc.setFillColor(220, 38, 38); // Red
+            doc.circle(markerX, markerY, 3, 'F');
+            doc.setDrawColor(255, 255, 255);
+            doc.setLineWidth(0.8);
+            doc.circle(markerX, markerY, 3, 'S');
+            
+            // Number inside marker
+            doc.setFontSize(6);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(255, 255, 255);
+            doc.text((i + 1).toString(), markerX, markerY + 0.8, { align: 'center' });
+          }
         }
+        
+        // Annotations legend (next to photo)
+        if (photoMarkers.length > 0) {
+          const legendX = margin + photoWidth + 8;
+          const legendWidth = pageWidth - margin - legendX - 5;
+          let legendY = yPos + 2;
+          
+          doc.setFillColor(...COLORS.background);
+          const legendBoxHeight = Math.min(photoMarkers.length * 8 + 6, photoHeight);
+          drawRoundedRect(doc, legendX, yPos, legendWidth, legendBoxHeight, 2);
+          
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...COLORS.primary);
+          doc.text('Identified Issues:', legendX + 3, legendY + 4);
+          legendY += 8;
+          
+          for (let i = 0; i < photoMarkers.length && legendY < yPos + legendBoxHeight - 4; i++) {
+            const marker = photoMarkers[i];
+            
+            // Marker number badge
+            doc.setFillColor(220, 38, 38);
+            doc.circle(legendX + 5, legendY, 2.5, 'F');
+            doc.setFontSize(6);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(255, 255, 255);
+            doc.text((i + 1).toString(), legendX + 5, legendY + 0.8, { align: 'center' });
+            
+            // Label text
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...COLORS.text);
+            const labelText = marker.label.length > 40 ? marker.label.substring(0, 37) + '...' : marker.label;
+            doc.text(labelText, legendX + 10, legendY + 1);
+            
+            legendY += 7;
+          }
+          
+          // Show "and X more..." if truncated
+          if (photoMarkers.length > Math.floor((legendBoxHeight - 14) / 7)) {
+            const remaining = photoMarkers.length - Math.floor((legendBoxHeight - 14) / 7);
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(...COLORS.textMuted);
+            doc.text(`+ ${remaining} more issue${remaining > 1 ? 's' : ''}`, legendX + 5, legendY);
+          }
+        }
+        
+        yPos += photoHeight + spacing;
       }
     } catch (error) {
       console.error('Error adding image to PDF:', error);
     }
-  }
-  
-  if (photosInRow > 0) {
-    yPos += photoHeight + spacing;
   }
   
   return yPos;
@@ -537,7 +621,7 @@ export const generatePDF = async (
   
   // Photos
   if (inspection.photo_urls && inspection.photo_urls.length > 0) {
-    yPos = await addPhotosToPDF(doc, inspection.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+    yPos = await addPhotosToPDF(doc, inspection.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, inspection.image_annotations);
   }
   
   // AI Analysis
@@ -701,7 +785,7 @@ export const generateJobPDF = async (
     
     // Photos
     if (rug.photo_urls && rug.photo_urls.length > 0) {
-      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations);
     }
     
     // Analysis
@@ -849,7 +933,7 @@ export const generateJobPDFBase64 = async (
     yPos += 5;
     
     if (rug.photo_urls && rug.photo_urls.length > 0) {
-      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations);
     }
     
     if (rug.analysis_report) {
