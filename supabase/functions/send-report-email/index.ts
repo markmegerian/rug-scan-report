@@ -2,6 +2,57 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
+// Rate limiting configuration
+const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute window
+const RATE_LIMIT_MAX_REQUESTS = 5; // Max 5 emails per minute per user
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+
+// Clean up old rate limit entries periodically
+function cleanupRateLimits() {
+  const now = Date.now();
+  for (const [key, value] of rateLimitMap.entries()) {
+    if (now > value.resetTime) {
+      rateLimitMap.delete(key);
+    }
+  }
+}
+
+// Check rate limit for a user
+function checkRateLimit(userId: string): { allowed: boolean; remaining: number; resetIn: number } {
+  cleanupRateLimits();
+  const now = Date.now();
+  const userLimit = rateLimitMap.get(userId);
+  
+  if (!userLimit || now > userLimit.resetTime) {
+    rateLimitMap.set(userId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - 1, resetIn: RATE_LIMIT_WINDOW_MS };
+  }
+  
+  if (userLimit.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return { allowed: false, remaining: 0, resetIn: userLimit.resetTime - now };
+  }
+  
+  userLimit.count++;
+  return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - userLimit.count, resetIn: userLimit.resetTime - now };
+}
+
+// Sanitize string input - remove potential injection characters
+function sanitizeString(input: string): string {
+  return input
+    .replace(/[<>{}[\]\\]/g, '') // Remove potentially dangerous characters
+    .replace(/javascript:/gi, '') // Remove javascript: protocol
+    .replace(/data:/gi, '') // Remove data: protocol  
+    .replace(/on\w+=/gi, '') // Remove event handlers
+    .trim();
+}
+
+// Validate base64 string (basic check)
+function isValidBase64(str: string): boolean {
+  if (!str || str.length === 0) return true; // Optional field
+  // Check if string only contains valid base64 characters
+  return /^[A-Za-z0-9+/=]+$/.test(str);
+}
+
 // Allowed origins for CORS - restricts to known application domains
 const ALLOWED_ORIGINS = [
   "https://rug-scan-report.lovable.app",
@@ -20,22 +71,22 @@ const getCorsHeaders = (req: Request) => {
   };
 };
 
-// Input validation schema
+// Input validation schema with stricter constraints and sanitization
 const EmailRequestSchema = z.object({
   to: z.string().email().max(255),
-  clientName: z.string().min(1).max(200),
-  jobNumber: z.string().min(1).max(100),
+  clientName: z.string().min(1).max(200).transform(sanitizeString),
+  jobNumber: z.string().min(1).max(100).transform(sanitizeString),
   rugDetails: z.array(z.object({
-    rugNumber: z.string().min(1).max(100),
-    rugType: z.string().min(1).max(100),
-    dimensions: z.string().max(100)
+    rugNumber: z.string().min(1).max(100).transform(sanitizeString),
+    rugType: z.string().min(1).max(100).transform(sanitizeString),
+    dimensions: z.string().max(100).transform(sanitizeString)
   })).max(50),
-  pdfBase64: z.string().max(10000000).optional(), // ~7.5MB max PDF
-  subject: z.string().max(200).optional(),
-  customMessage: z.string().max(5000).optional(),
-  businessName: z.string().max(200).optional(),
+  pdfBase64: z.string().max(10000000).refine(isValidBase64, { message: "Invalid PDF data" }).optional(),
+  subject: z.string().max(200).transform(sanitizeString).optional(),
+  customMessage: z.string().max(5000).transform(sanitizeString).optional(),
+  businessName: z.string().max(200).transform(sanitizeString).optional(),
   businessEmail: z.string().email().max(255).optional().or(z.literal("")),
-  businessPhone: z.string().max(50).optional(),
+  businessPhone: z.string().max(50).transform(sanitizeString).optional(),
 });
 
 // SMTP client that handles STARTTLS on port 587
@@ -198,7 +249,29 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log("Authenticated user:", claimsData.claims.sub);
+    const authenticatedUserId = claimsData.claims.sub as string;
+    console.log("Authenticated user:", authenticatedUserId);
+
+    // Check rate limit
+    const rateLimit = checkRateLimit(authenticatedUserId);
+    if (!rateLimit.allowed) {
+      console.warn("Rate limit exceeded for user:", authenticatedUserId);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Rate limit exceeded. Please try again later.',
+          resetIn: Math.ceil(rateLimit.resetIn / 1000)
+        }),
+        { 
+          status: 429, 
+          headers: { 
+            ...corsHeaders, 
+            "Content-Type": "application/json",
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(Math.ceil(rateLimit.resetIn / 1000))
+          } 
+        }
+      );
+    }
 
     // Parse and validate request body
     let body;

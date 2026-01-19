@@ -5,6 +5,65 @@ import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
+// Rate limiting configuration
+const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute window
+const RATE_LIMIT_MAX_REQUESTS = 10; // Max 10 requests per minute per user
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+
+// Clean up old rate limit entries periodically
+function cleanupRateLimits() {
+  const now = Date.now();
+  for (const [key, value] of rateLimitMap.entries()) {
+    if (now > value.resetTime) {
+      rateLimitMap.delete(key);
+    }
+  }
+}
+
+// Check rate limit for a user
+function checkRateLimit(userId: string): { allowed: boolean; remaining: number; resetIn: number } {
+  cleanupRateLimits();
+  const now = Date.now();
+  const userLimit = rateLimitMap.get(userId);
+  
+  if (!userLimit || now > userLimit.resetTime) {
+    rateLimitMap.set(userId, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - 1, resetIn: RATE_LIMIT_WINDOW_MS };
+  }
+  
+  if (userLimit.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return { allowed: false, remaining: 0, resetIn: userLimit.resetTime - now };
+  }
+  
+  userLimit.count++;
+  return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - userLimit.count, resetIn: userLimit.resetTime - now };
+}
+
+// Sanitize string input - remove potential injection characters
+function sanitizeString(input: string): string {
+  return input
+    .replace(/[<>{}[\]\\]/g, '') // Remove potentially dangerous characters
+    .replace(/javascript:/gi, '') // Remove javascript: protocol
+    .replace(/data:/gi, '') // Remove data: protocol
+    .replace(/on\w+=/gi, '') // Remove event handlers
+    .trim();
+}
+
+// Validate URL is from allowed domains (Supabase storage)
+function isValidPhotoUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const allowedHosts = [
+      'tviommdnpvfceuprrwzf.supabase.co',
+      'supabase.co',
+      'supabase.in'
+    ];
+    return allowedHosts.some(host => parsed.hostname.endsWith(host));
+  } catch {
+    return false;
+  }
+}
+
 // Allowed origins for CORS - restricts to known application domains
 const ALLOWED_ORIGINS = [
   "https://rug-scan-report.lovable.app",
@@ -23,16 +82,16 @@ const getCorsHeaders = (req: Request) => {
   };
 };
 
-// Input validation schema
+// Input validation schema with stricter constraints
 const RequestSchema = z.object({
-  photos: z.array(z.string().url()).min(1).max(20),
+  photos: z.array(z.string().url().refine(isValidPhotoUrl, { message: "Invalid photo URL domain" })).min(1).max(20),
   rugInfo: z.object({
-    clientName: z.string().min(1).max(200),
-    rugNumber: z.string().min(1).max(100),
-    rugType: z.string().min(1).max(100),
-    length: z.union([z.string().max(20), z.number()]).optional(),
-    width: z.union([z.string().max(20), z.number()]).optional(),
-    notes: z.string().max(5000).optional().nullable()
+    clientName: z.string().min(1).max(200).transform(sanitizeString),
+    rugNumber: z.string().min(1).max(100).transform(sanitizeString),
+    rugType: z.string().min(1).max(100).transform(sanitizeString),
+    length: z.union([z.string().max(20), z.number().min(0).max(1000)]).optional(),
+    width: z.union([z.string().max(20), z.number().min(0).max(1000)]).optional(),
+    notes: z.string().max(5000).optional().nullable().transform(val => val ? sanitizeString(val) : val)
   }),
   userId: z.string().uuid().optional()
 });
@@ -173,8 +232,29 @@ serve(async (req) => {
       );
     }
 
-    const authenticatedUserId = claimsData.claims.sub;
+    const authenticatedUserId = claimsData.claims.sub as string;
     console.log("Authenticated user:", authenticatedUserId);
+
+    // Check rate limit
+    const rateLimit = checkRateLimit(authenticatedUserId);
+    if (!rateLimit.allowed) {
+      console.warn("Rate limit exceeded for user:", authenticatedUserId);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Rate limit exceeded. Please try again later.',
+          resetIn: Math.ceil(rateLimit.resetIn / 1000)
+        }),
+        { 
+          status: 429, 
+          headers: { 
+            ...corsHeaders, 
+            "Content-Type": "application/json",
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": String(Math.ceil(rateLimit.resetIn / 1000))
+          } 
+        }
+      );
+    }
 
     // Parse and validate request body
     let body;
