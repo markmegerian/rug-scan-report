@@ -1,7 +1,7 @@
 project_id = "tviommdnpvfceuprrwzf"
 
 [functions.analyze-rug]
-verify_jwt = false
+verify_jwt = true
 
 [functions.send-report-email]
-verify_jwt = false
+verify_jwt = true
