@@ -9,6 +9,7 @@ const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 const ALLOWED_ORIGINS = [
   "https://rug-scan-report.lovable.app",
   "https://id-preview--fef72b1b-d121-4ff6-bcc3-c957ca919cde.lovable.app",
+  "https://fef72b1b-d121-4ff6-bcc3-c957ca919cde.lovableproject.com",
   "https://sandbox.gmit.io",
   Deno.env.get("APP_ORIGIN") || ""
 ].filter(Boolean);

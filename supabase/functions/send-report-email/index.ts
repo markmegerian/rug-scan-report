@@ -6,6 +6,7 @@ import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 const ALLOWED_ORIGINS = [
   "https://rug-scan-report.lovable.app",
   "https://id-preview--fef72b1b-d121-4ff6-bcc3-c957ca919cde.lovable.app",
+  "https://fef72b1b-d121-4ff6-bcc3-c957ca919cde.lovableproject.com",
   "https://sandbox.gmit.io",
   Deno.env.get("APP_ORIGIN") || ""
 ].filter(Boolean);
