@@ -65,6 +65,7 @@ const JobDetail = () => {
   const [addingRug, setAddingRug] = useState(false);
   const [analyzingAll, setAnalyzingAll] = useState(false);
   const [analyzingRugId, setAnalyzingRugId] = useState<string | null>(null);
+  const [reanalyzingRugId, setReanalyzingRugId] = useState<string | null>(null);
   const [savingJob, setSavingJob] = useState(false);
   const [savingRug, setSavingRug] = useState(false);
   const [selectedRug, setSelectedRug] = useState<Rug | null>(null);
@@ -356,6 +357,59 @@ const JobDetail = () => {
       toast.error(error instanceof Error ? error.message : `Failed to analyze ${rug.rug_number}`);
     } finally {
       setAnalyzingRugId(null);
+    }
+  };
+
+  const handleReanalyzeRug = async (rug: Rug) => {
+    if (!job) return;
+
+    setReanalyzingRugId(rug.id);
+    
+    try {
+      toast.info(`Re-analyzing ${rug.rug_number}...`);
+      
+      // Clear existing analysis first
+      await supabase
+        .from('inspections')
+        .update({ analysis_report: null })
+        .eq('id', rug.id);
+
+      const { data, error } = await supabase.functions.invoke('analyze-rug', {
+        body: {
+          photos: rug.photo_urls || [],
+          rugInfo: {
+            clientName: job.client_name,
+            rugNumber: rug.rug_number,
+            rugType: rug.rug_type,
+            length: rug.length?.toString() || '',
+            width: rug.width?.toString() || '',
+            notes: rug.notes || ''
+          },
+          userId: user?.id
+        }
+      });
+
+      if (error) throw error;
+      if (data.error) throw new Error(data.error);
+
+      // Update the rug with new analysis
+      const { error: updateError } = await supabase
+        .from('inspections')
+        .update({ analysis_report: data.report })
+        .eq('id', rug.id);
+
+      if (updateError) throw updateError;
+
+      // Update local state to reflect the new report
+      setSelectedRug(prev => prev ? { ...prev, analysis_report: data.report } : null);
+
+      toast.success(`${rug.rug_number} re-analyzed!`);
+      fetchJobDetails();
+    } catch (error) {
+      console.error('Re-analysis failed:', error);
+      toast.error(error instanceof Error ? error.message : `Failed to re-analyze ${rug.rug_number}`);
+    } finally {
+      setReanalyzingRugId(null);
     }
   };
 
@@ -668,6 +722,8 @@ const JobDetail = () => {
                 setShowReport(false);
                 setShowEstimateReview(true);
               }}
+              onReanalyze={() => handleReanalyzeRug(selectedRug)}
+              isReanalyzing={reanalyzingRugId === selectedRug.id}
             />
           </div>
         </main>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, DollarSign, Wrench, ArrowLeft, Download, ClipboardList } from 'lucide-react';
+import { FileText, DollarSign, Wrench, ArrowLeft, Download, ClipboardList, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -15,6 +15,8 @@ interface AnalysisReportProps {
   };
   onNewInspection: () => void;
   onReviewEstimate?: () => void;
+  onReanalyze?: () => void;
+  isReanalyzing?: boolean;
 }
 
 
@@ -23,6 +25,8 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
   rugInfo,
   onNewInspection,
   onReviewEstimate,
+  onReanalyze,
+  isReanalyzing = false,
 }) => {
   const handleDownloadPDF = async () => {
     try {
@@ -107,6 +111,18 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
           <ArrowLeft className="h-4 w-4" />
           New Inspection
         </Button>
+        {onReanalyze && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onReanalyze}
+            disabled={isReanalyzing}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${isReanalyzing ? 'animate-spin' : ''}`} />
+            {isReanalyzing ? 'Re-analyzing...' : 'Re-analyze'}
+          </Button>
+        )}
       </div>
 
       {/* Rug Summary Card */}
