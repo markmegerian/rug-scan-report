@@ -171,7 +171,8 @@ const JobDetail = () => {
     const uploadedUrls: string[] = [];
     
     for (const photo of photos) {
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}-${photo.name}`;
+      // Include user ID in path for user-scoped storage policies
+      const fileName = `${user!.id}/${Date.now()}-${Math.random().toString(36).substring(7)}-${photo.name}`;
       
       const { data, error } = await supabase.storage
         .from('rug-photos')
