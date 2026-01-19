@@ -52,7 +52,9 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
   const [editingMarker, setEditingMarker] = useState<{ photoIndex: number; annIndex: number } | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [draggingMarker, setDraggingMarker] = useState<{ photoIndex: number; annIndex: number } | null>(null);
+  const [longPressMarker, setLongPressMarker] = useState<{ photoIndex: number; annIndex: number } | null>(null);
   const imageRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync local state when props change
   React.useEffect(() => {
@@ -139,10 +141,33 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
     setEditLabel('');
   };
 
+  // Long press handling for mobile
+  const handleLongPressStart = (photoIndex: number, annIndex: number) => {
+    if (!editMode) return;
+    
+    longPressTimerRef.current = setTimeout(() => {
+      setLongPressMarker({ photoIndex, annIndex });
+      // Haptic feedback if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500); // 500ms long press
+  };
+
+  const handleLongPressEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
   const handlePointerDown = (e: React.PointerEvent, photoIndex: number, annIndex: number) => {
     if (!editMode) return;
     e.preventDefault();
     e.stopPropagation();
+    
+    // Start long press detection
+    handleLongPressStart(photoIndex, annIndex);
     
     // Capture the pointer for smooth tracking
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -151,7 +176,20 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
     const imageEl = imageRefs.current[photoIndex];
     if (!imageEl) return;
 
+    let hasMoved = false;
+    const startX = e.clientX;
+    const startY = e.clientY;
+
     const handlePointerMove = (moveEvent: PointerEvent) => {
+      // Cancel long press if user starts dragging
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+        hasMoved = true;
+        handleLongPressEnd();
+        setLongPressMarker(null);
+      }
+      
       const rect = imageEl.getBoundingClientRect();
       const x = Math.max(0, Math.min(100, ((moveEvent.clientX - rect.left) / rect.width) * 100));
       const y = Math.max(0, Math.min(100, ((moveEvent.clientY - rect.top) / rect.height) * 100));
@@ -172,6 +210,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
     };
 
     const handlePointerUp = (upEvent: PointerEvent) => {
+      handleLongPressEnd();
       (upEvent.target as HTMLElement).releasePointerCapture?.(upEvent.pointerId);
       setDraggingMarker(null);
       document.removeEventListener('pointermove', handlePointerMove);
@@ -483,9 +522,12 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
               )}
             </div>
             {editMode && (
-              <div className="mt-3 p-3 bg-primary/10 rounded-lg flex items-center gap-2 text-sm text-primary">
-                <MousePointer className="h-4 w-4" />
-                <span>Click to add markers. Drag markers to reposition. Click a marker to edit or delete.</span>
+              <div className="mt-3 p-3 bg-primary/10 rounded-lg flex items-start gap-2 text-sm text-primary">
+                <MousePointer className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span className="leading-relaxed">
+                  <span className="hidden sm:inline">Tap to add markers. Drag to reposition. Click a marker to edit or delete.</span>
+                  <span className="sm:hidden">Tap to add markers. Drag to move. Long-press a marker to edit or delete.</span>
+                </span>
               </div>
             )}
           </CardHeader>
@@ -516,10 +558,11 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
                       {/* Annotation markers */}
                       {annotations.map((annotation, annIndex) => {
                         const isDragging = draggingMarker?.photoIndex === photoIndex && draggingMarker?.annIndex === annIndex;
+                        const isLongPressed = longPressMarker?.photoIndex === photoIndex && longPressMarker?.annIndex === annIndex;
                         return (
                           <div
                             key={annIndex}
-                            className={`absolute ${isDragging ? 'z-50 scale-110' : 'z-10'}`}
+                            className={`absolute ${isDragging ? 'z-50 scale-110' : isLongPressed ? 'z-50' : 'z-10'}`}
                             style={{
                               left: `${annotation.x}%`,
                               top: `${annotation.y}%`,
@@ -537,7 +580,7 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
                           >
                             {/* Marker dot - larger touch target for mobile */}
                             <div className={`relative group ${editMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}>
-                              <div className={`w-7 h-7 sm:w-6 sm:h-6 bg-destructive rounded-full flex items-center justify-center text-destructive-foreground text-xs font-bold shadow-lg border-2 border-white ${editMode ? 'ring-2 ring-primary/50' : 'animate-pulse'}`}>
+                              <div className={`w-7 h-7 sm:w-6 sm:h-6 bg-destructive rounded-full flex items-center justify-center text-destructive-foreground text-xs font-bold shadow-lg border-2 border-white ${editMode ? 'ring-2 ring-primary/50' : 'animate-pulse'} ${isLongPressed ? 'scale-125 ring-4 ring-primary' : ''} transition-transform`}>
                                 {annIndex + 1}
                               </div>
                               {/* Tooltip - hidden on touch devices in non-edit mode */}
@@ -548,9 +591,52 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
                                   </div>
                                 </div>
                               )}
-                              {/* Edit mode controls - always visible on touch when marker is active */}
-                              {editMode && (
-                                <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex z-20 gap-1 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity bg-background/90 backdrop-blur-sm rounded-lg p-1 shadow-lg border border-border">
+                              {/* Long-press menu for mobile - visible when long-pressed */}
+                              {editMode && isLongPressed && (
+                                <div 
+                                  className="absolute -top-12 left-1/2 -translate-x-1/2 flex z-30 gap-1 bg-background rounded-xl p-1.5 shadow-xl border-2 border-primary animate-scale-in"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="h-9 w-9 p-0 touch-manipulation rounded-lg"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setLongPressMarker(null);
+                                      handleEditMarker(photoIndex, annIndex);
+                                    }}
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="h-9 w-9 p-0 touch-manipulation rounded-lg"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setLongPressMarker(null);
+                                      handleDeleteMarker(photoIndex, annIndex);
+                                    }}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-9 w-9 p-0 touch-manipulation rounded-lg"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setLongPressMarker(null);
+                                    }}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              )}
+                              {/* Edit mode controls - hover for desktop */}
+                              {editMode && !isLongPressed && (
+                                <div className="absolute -top-10 left-1/2 -translate-x-1/2 hidden md:flex z-20 gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-background/90 backdrop-blur-sm rounded-lg p-1 shadow-lg border border-border">
                                   <Button
                                     variant="secondary"
                                     size="sm"
