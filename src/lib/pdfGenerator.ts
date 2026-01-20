@@ -685,6 +685,172 @@ const extractCostLines = (analysis: string): CostLine[] => {
   return costLines;
 };
 
+// Parse analysis into logical sections for proper ordering
+interface AnalysisSections {
+  professionalAnalysis: string;
+  serviceDescriptions: string;
+  additionalServices: string;
+  otherContent: string;
+}
+
+const parseAnalysisSections = (analysis: string): AnalysisSections => {
+  const lines = analysis.split('\n');
+  const sections: AnalysisSections = {
+    professionalAnalysis: '',
+    serviceDescriptions: '',
+    additionalServices: '',
+    otherContent: '',
+  };
+  
+  let currentSection: keyof AnalysisSections = 'otherContent';
+  const sectionLines: Record<keyof AnalysisSections, string[]> = {
+    professionalAnalysis: [],
+    serviceDescriptions: [],
+    additionalServices: [],
+    otherContent: [],
+  };
+  
+  for (const line of lines) {
+    const trimmed = line.trim().toLowerCase();
+    const originalLine = line;
+    
+    // Detect section headers
+    if (trimmed.includes('professional analysis') || trimmed.includes('inspection summary') || 
+        trimmed.includes('condition assessment') || trimmed.includes('rug assessment')) {
+      currentSection = 'professionalAnalysis';
+      sectionLines[currentSection].push(originalLine);
+      continue;
+    }
+    
+    if (trimmed.includes('service description') || trimmed.includes('recommended service') ||
+        trimmed.includes('cleaning service') || (trimmed.includes('service') && trimmed.includes('detail'))) {
+      currentSection = 'serviceDescriptions';
+      sectionLines[currentSection].push(originalLine);
+      continue;
+    }
+    
+    if (trimmed.includes('additional') || trimmed.includes('optional') || 
+        trimmed.includes('moth proof') || trimmed.includes('fiber protection') || 
+        trimmed.includes('custom pad')) {
+      currentSection = 'additionalServices';
+      sectionLines[currentSection].push(originalLine);
+      continue;
+    }
+    
+    // Skip cost lines from these sections (they go in the cost table)
+    if (/\$[\d,]+/.test(originalLine) && currentSection !== 'additionalServices') {
+      continue;
+    }
+    
+    sectionLines[currentSection].push(originalLine);
+  }
+  
+  sections.professionalAnalysis = sectionLines.professionalAnalysis.join('\n');
+  sections.serviceDescriptions = sectionLines.serviceDescriptions.join('\n');
+  sections.additionalServices = sectionLines.additionalServices.join('\n');
+  sections.otherContent = sectionLines.otherContent.join('\n');
+  
+  return sections;
+};
+
+// Render a specific section with header
+const addAnalysisSection = (
+  doc: jsPDF,
+  content: string,
+  sectionTitle: string,
+  startY: number,
+  margin: number,
+  pageWidth: number,
+  pageHeight: number,
+  branding?: BusinessBranding | null,
+  cachedLogoBase64?: string | null
+): number => {
+  if (!content.trim()) return startY;
+  
+  let yPos = startY;
+  
+  // Check for page break
+  if (yPos > pageHeight - 50) {
+    doc.addPage();
+    yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+  }
+  
+  yPos = addSectionHeader(doc, sectionTitle, yPos, margin, pageWidth);
+  yPos += 3;
+  
+  const maxWidth = pageWidth - margin * 2 - 8;
+  const lines = content.split('\n');
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) {
+      yPos += 2;
+      continue;
+    }
+    
+    // Skip section headers (already shown)
+    if (trimmedLine.toLowerCase().includes(sectionTitle.toLowerCase().split(' ')[0])) {
+      continue;
+    }
+    
+    // Check for page break
+    if (yPos > pageHeight - 35) {
+      doc.addPage();
+      yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+    }
+    
+    const isSubHeader = trimmedLine.startsWith('**') || trimmedLine.startsWith('###') || 
+                        (/^[A-Z][A-Za-z\s&]+:$/.test(trimmedLine));
+    const isBullet = trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*');
+    
+    if (isSubHeader) {
+      const headerText = trimmedLine.replace(/[#*]/g, '').replace(/:$/, '').trim();
+      yPos += 4;
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...COLORS.text);
+      doc.text(headerText, margin + 4, yPos);
+      yPos += 6;
+    } else if (isBullet) {
+      const bulletText = trimmedLine.replace(/^[-•*]\s*/, '');
+      const wrappedLines = doc.splitTextToSize(bulletText, maxWidth - 8);
+      
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.text);
+      doc.setFillColor(...COLORS.accent);
+      doc.circle(margin + 4, yPos - 0.5, 1, 'F');
+      
+      wrappedLines.forEach((wLine: string) => {
+        if (yPos > pageHeight - 25) {
+          doc.addPage();
+          yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+        }
+        doc.text(wLine, margin + 10, yPos);
+        yPos += 4.5;
+      });
+      yPos += 1;
+    } else {
+      const wrappedLines = doc.splitTextToSize(trimmedLine, maxWidth);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.text);
+      
+      wrappedLines.forEach((wLine: string) => {
+        if (yPos > pageHeight - 25) {
+          doc.addPage();
+          yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+        }
+        doc.text(wLine, margin + 2, yPos);
+        yPos += 4.5;
+      });
+      yPos += 1.5;
+    }
+  }
+  
+  return yPos + 4;
+};
+
 // Format analysis report - improved readability
 const addFormattedAnalysis = (
   doc: jsPDF,
@@ -1237,37 +1403,37 @@ export const generateJobPDF = async (
     
     yPos += 3;
     
-    // Photos - 2-up layout
+    // REORDERED SECTIONS: 1. Professional Analysis, 2. Service Descriptions, 3. Inspection Photos, 4. Service Estimate, 5. Additional Services
+    
+    if (rug.analysis_report) {
+      const sections = parseAnalysisSections(rug.analysis_report);
+      
+      // 1. Professional Analysis (first)
+      if (sections.professionalAnalysis.trim() || sections.otherContent.trim()) {
+        const analysisContent = sections.professionalAnalysis || sections.otherContent;
+        yPos = addAnalysisSection(doc, analysisContent, 'Professional Analysis', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+      }
+      
+      // 2. Comprehensive Service Descriptions
+      if (sections.serviceDescriptions.trim()) {
+        yPos = addAnalysisSection(doc, sections.serviceDescriptions, 'Comprehensive Service Descriptions', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+      }
+    }
+    
+    // 3. Inspection Photos - 2-up layout
     if (rug.photo_urls && rug.photo_urls.length > 0) {
       yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations);
     }
     
-    // Cost breakdown
+    // 4. Service Estimate (Cost breakdown)
     if (rug.analysis_report) {
       yPos = addCostBreakdown(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
-    }
-    
-    // Analysis
-    if (rug.analysis_report) {
-      if (yPos > pageHeight - 50) {
-        doc.addPage();
-        yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+      
+      // 5. Additional Recommended Services
+      const sections = parseAnalysisSections(rug.analysis_report);
+      if (sections.additionalServices.trim()) {
+        yPos = addAnalysisSection(doc, sections.additionalServices, 'Additional Recommended Services', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       }
-      
-      yPos = addSectionHeader(doc, 'Professional Analysis', yPos, margin, pageWidth);
-      yPos += 3;
-      
-      yPos = addFormattedAnalysis(
-        doc,
-        rug.analysis_report,
-        yPos,
-        margin,
-        pageWidth,
-        pageHeight,
-        branding,
-        cachedLogoBase64,
-        true
-      );
     }
   }
   
@@ -1434,24 +1600,37 @@ export const generateJobPDFBase64 = async (
     
     yPos += 3;
     
+    // REORDERED SECTIONS: 1. Professional Analysis, 2. Service Descriptions, 3. Inspection Photos, 4. Service Estimate, 5. Additional Services
+    
+    if (rug.analysis_report) {
+      const sections = parseAnalysisSections(rug.analysis_report);
+      
+      // 1. Professional Analysis (first)
+      if (sections.professionalAnalysis.trim() || sections.otherContent.trim()) {
+        const analysisContent = sections.professionalAnalysis || sections.otherContent;
+        yPos = addAnalysisSection(doc, analysisContent, 'Professional Analysis', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+      }
+      
+      // 2. Comprehensive Service Descriptions
+      if (sections.serviceDescriptions.trim()) {
+        yPos = addAnalysisSection(doc, sections.serviceDescriptions, 'Comprehensive Service Descriptions', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+      }
+    }
+    
+    // 3. Inspection Photos
     if (rug.photo_urls && rug.photo_urls.length > 0) {
       yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations, true);
     }
     
+    // 4. Service Estimate (Cost breakdown)
     if (rug.analysis_report) {
       yPos = addCostBreakdown(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
-    }
-    
-    if (rug.analysis_report) {
-      if (yPos > pageHeight - 50) {
-        doc.addPage();
-        yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+      
+      // 5. Additional Recommended Services
+      const sections = parseAnalysisSections(rug.analysis_report);
+      if (sections.additionalServices.trim()) {
+        yPos = addAnalysisSection(doc, sections.additionalServices, 'Additional Recommended Services', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       }
-      
-      yPos = addSectionHeader(doc, 'Professional Analysis', yPos, margin, pageWidth);
-      yPos += 3;
-      
-      yPos = addFormattedAnalysis(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, true);
     }
   }
   
