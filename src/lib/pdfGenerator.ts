@@ -811,10 +811,17 @@ const addAnalysisSectionContent = (
   const maxWidth = pageWidth - margin * 2;
   const lines = content.split('\n');
   
-  // Skip phrases to filter out
+  // Skip phrases to filter out (including rug descriptions already in summary)
   const skipPhrases = [
     'dear ', 'professional analysis', 'comprehensive service', 'service description',
     'additional recommended', 'to further protect', 'we also recommend considering'
+  ];
+  
+  // Rug description phrases that appear in the executive summary - skip these
+  const rugDescriptionPhrases = [
+    'your rug is', 'this rug is', 'the rug is', 'hand-knotted', 'handknotted',
+    'tribal piece', 'repeating octagonal', 'guls', 'primary fiber', 'shows signs of use',
+    'restore its beauty', 'ensure its longevity', 'professional attention'
   ];
   
   for (const line of lines) {
@@ -830,6 +837,12 @@ const addAnalysisSectionContent = (
     if (trimmedLine.startsWith('**') || trimmedLine.startsWith('###') || trimmedLine.startsWith('##') ||
         /^[A-Z][A-Z\s]+:?$/.test(trimmedLine) ||
         skipPhrases.some(p => lowerLine.includes(p))) {
+      continue;
+    }
+    
+    // Skip rug description paragraphs (already shown in executive summary)
+    const hasMultipleRugDescPhrases = rugDescriptionPhrases.filter(p => lowerLine.includes(p)).length >= 2;
+    if (hasMultipleRugDescPhrases) {
       continue;
     }
     
