@@ -334,7 +334,7 @@ const addSectionHeader = (
   return yPos + 14;
 };
 
-// Executive Summary Card - displays key findings and cost estimate
+// Executive Summary Card - displays short appraisal and cost estimate
 const addExecutiveSummary = (
   doc: jsPDF,
   inspection: Inspection,
@@ -344,14 +344,15 @@ const addExecutiveSummary = (
 ): number => {
   const cardWidth = pageWidth - margin * 2;
   
-  // Parse key findings from analysis
+  // Parse short appraisal from analysis
   const analysis = inspection.analysis_report || '';
-  const findings = extractKeyFindings(analysis);
+  const shortAppraisal = extractShortAppraisal(analysis);
   const estimatedCost = extractTotalCost(analysis);
   
-  // Calculate card height based on findings
-  const findingsToShow = findings.slice(0, 3);
-  const cardHeight = 45 + (findingsToShow.length * 5);
+  // Calculate card height based on appraisal
+  const maxAppraisalWidth = cardWidth - 70;
+  const appraisalLines = doc.splitTextToSize(shortAppraisal, maxAppraisalWidth);
+  const cardHeight = 35 + Math.max(appraisalLines.length * 4, 10);
   
   // Card background
   doc.setFillColor(...COLORS.cardBg);
@@ -372,10 +373,9 @@ const addExecutiveSummary = (
   doc.setTextColor(...COLORS.accent);
   doc.text('AT A GLANCE', margin + 6, yPos + 7);
   
-  // Left column - Rug info
+  // Left column - Rug info with type and dimensions
   let innerY = yPos + 14;
   const col1X = margin + 6;
-  const col2X = margin + cardWidth / 2 + 10;
   
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
@@ -389,35 +389,67 @@ const addExecutiveSummary = (
     : 'Size not specified';
   doc.text(`Rug #${inspection.rug_number} • ${size}`, col1X, innerY + 5);
   
-  // Right column - Key findings
-  innerY = yPos + 14;
+  // Short appraisal below rug info
+  innerY += 14;
   doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...COLORS.textMuted);
-  doc.text('Key Findings:', col2X, innerY);
-  
-  innerY += 5;
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...COLORS.text);
-  findingsToShow.forEach((finding, idx) => {
-    const truncated = finding.length > 40 ? finding.substring(0, 37) + '...' : finding;
-    doc.text(`• ${truncated}`, col2X, innerY + (idx * 5));
+  appraisalLines.forEach((line: string, idx: number) => {
+    doc.text(line, col1X, innerY + (idx * 4));
   });
   
-  // Cost estimate - prominent at bottom right
+  // Cost estimate - prominent at right
   if (estimatedCost) {
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...COLORS.primary);
-    doc.text(estimatedCost, pageWidth - margin - 6, yPos + cardHeight - 8, { align: 'right' });
+    doc.text(estimatedCost, pageWidth - margin - 6, yPos + 16, { align: 'right' });
     
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...COLORS.textMuted);
-    doc.text('Estimated Total', pageWidth - margin - 6, yPos + cardHeight - 3, { align: 'right' });
+    doc.text('Estimated Total', pageWidth - margin - 6, yPos + 21, { align: 'right' });
   }
   
   return yPos + cardHeight + 8;
+};
+
+// Helper to extract a short appraisal (first meaningful sentence about the rug)
+const extractShortAppraisal = (analysis: string): string => {
+  const lines = analysis.split('\n');
+  
+  // Skip generic phrases
+  const genericPhrases = [
+    'dear ', 'professional inspection', 'inspected by', 'based on my assessment',
+    'we recommend', 'please note', 'thank you', 'following services'
+  ];
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const lowerTrimmed = trimmed.toLowerCase();
+    
+    // Skip empty, header-like lines, lines with costs, or generic phrases
+    if (!trimmed || 
+        trimmed.length < 30 || 
+        trimmed.startsWith('**') || 
+        trimmed.startsWith('#') ||
+        /^[A-Z][A-Z\s]+:?$/.test(trimmed) ||
+        trimmed.includes('$') ||
+        genericPhrases.some(p => lowerTrimmed.includes(p))) {
+      continue;
+    }
+    
+    // Look for descriptive sentences about the rug
+    if (lowerTrimmed.includes('rug') || lowerTrimmed.includes('carpet') || 
+        lowerTrimmed.includes('hand-knotted') || lowerTrimmed.includes('wool') ||
+        lowerTrimmed.includes('tribal') || lowerTrimmed.includes('piece')) {
+      // Return first 2 sentences max
+      const sentences = trimmed.split(/[.!]/).filter(s => s.trim().length > 10);
+      return sentences.slice(0, 2).join('. ').trim() + (sentences.length > 0 ? '.' : '');
+    }
+  }
+  
+  return '';
 };
 
 // Helper to extract key findings from analysis - looks for actual observations
@@ -753,7 +785,104 @@ const parseAnalysisSections = (analysis: string): AnalysisSections => {
   return sections;
 };
 
-// Render a specific section with header
+// Render a specific section content (no header - content only)
+const addAnalysisSectionContent = (
+  doc: jsPDF,
+  content: string,
+  startY: number,
+  margin: number,
+  pageWidth: number,
+  pageHeight: number,
+  branding?: BusinessBranding | null,
+  cachedLogoBase64?: string | null
+): number => {
+  if (!content.trim()) return startY;
+  
+  let yPos = startY;
+  const maxWidth = pageWidth - margin * 2;
+  const lines = content.split('\n');
+  
+  // Skip phrases to filter out
+  const skipPhrases = [
+    'dear ', 'professional analysis', 'comprehensive service', 'service description',
+    'additional recommended', 'to further protect', 'we also recommend considering'
+  ];
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    const lowerLine = trimmedLine.toLowerCase();
+    
+    if (!trimmedLine) {
+      yPos += 2;
+      continue;
+    }
+    
+    // Skip section headers and intro phrases
+    if (trimmedLine.startsWith('**') || trimmedLine.startsWith('###') || trimmedLine.startsWith('##') ||
+        /^[A-Z][A-Z\s]+:?$/.test(trimmedLine) ||
+        skipPhrases.some(p => lowerLine.includes(p))) {
+      continue;
+    }
+    
+    // Check for page break
+    if (yPos > pageHeight - 35) {
+      doc.addPage();
+      yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+    }
+    
+    const isSubHeader = /^[A-Z][A-Za-z\s&]+:$/.test(trimmedLine) && trimmedLine.length < 40;
+    const isBullet = trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*');
+    
+    if (isSubHeader) {
+      const headerText = trimmedLine.replace(/:$/, '').trim();
+      yPos += 4;
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...COLORS.text);
+      doc.text(headerText, margin, yPos);
+      yPos += 6;
+    } else if (isBullet) {
+      const bulletText = trimmedLine.replace(/^[-•*]\s*/, '');
+      const wrappedLines = doc.splitTextToSize(bulletText, maxWidth - 8);
+      
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.text);
+      doc.setFillColor(...COLORS.accent);
+      doc.circle(margin + 4, yPos - 0.5, 1, 'F');
+      
+      wrappedLines.forEach((wLine: string) => {
+        if (yPos > pageHeight - 25) {
+          doc.addPage();
+          yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+        }
+        doc.text(wLine, margin + 10, yPos);
+        yPos += 4.5;
+      });
+      yPos += 1;
+    } else {
+      // Regular paragraph - no indentation
+      const wrappedLines = doc.splitTextToSize(trimmedLine, maxWidth);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...COLORS.text);
+      
+      wrappedLines.forEach((wLine: string) => {
+        if (yPos > pageHeight - 25) {
+          doc.addPage();
+          yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+        }
+        doc.text(wLine, margin, yPos);
+        yPos += 4.5;
+      });
+      yPos += 1.5;
+    }
+  }
+  
+  return yPos + 4;
+};
+
+// Render a specific section with header (kept for backwards compatibility)
 const addAnalysisSection = (
   doc: jsPDF,
   content: string,
@@ -778,77 +907,7 @@ const addAnalysisSection = (
   yPos = addSectionHeader(doc, sectionTitle, yPos, margin, pageWidth);
   yPos += 3;
   
-  const maxWidth = pageWidth - margin * 2 - 8;
-  const lines = content.split('\n');
-  
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) {
-      yPos += 2;
-      continue;
-    }
-    
-    // Skip section headers (already shown)
-    if (trimmedLine.toLowerCase().includes(sectionTitle.toLowerCase().split(' ')[0])) {
-      continue;
-    }
-    
-    // Check for page break
-    if (yPos > pageHeight - 35) {
-      doc.addPage();
-      yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
-    }
-    
-    const isSubHeader = trimmedLine.startsWith('**') || trimmedLine.startsWith('###') || 
-                        (/^[A-Z][A-Za-z\s&]+:$/.test(trimmedLine));
-    const isBullet = trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*');
-    
-    if (isSubHeader) {
-      const headerText = trimmedLine.replace(/[#*]/g, '').replace(/:$/, '').trim();
-      yPos += 4;
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(...COLORS.text);
-      doc.text(headerText, margin + 4, yPos);
-      yPos += 6;
-    } else if (isBullet) {
-      const bulletText = trimmedLine.replace(/^[-•*]\s*/, '');
-      const wrappedLines = doc.splitTextToSize(bulletText, maxWidth - 8);
-      
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...COLORS.text);
-      doc.setFillColor(...COLORS.accent);
-      doc.circle(margin + 4, yPos - 0.5, 1, 'F');
-      
-      wrappedLines.forEach((wLine: string) => {
-        if (yPos > pageHeight - 25) {
-          doc.addPage();
-          yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
-        }
-        doc.text(wLine, margin + 10, yPos);
-        yPos += 4.5;
-      });
-      yPos += 1;
-    } else {
-      const wrappedLines = doc.splitTextToSize(trimmedLine, maxWidth);
-      doc.setFontSize(9);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...COLORS.text);
-      
-      wrappedLines.forEach((wLine: string) => {
-        if (yPos > pageHeight - 25) {
-          doc.addPage();
-          yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
-        }
-        doc.text(wLine, margin + 2, yPos);
-        yPos += 4.5;
-      });
-      yPos += 1.5;
-    }
-  }
-  
-  return yPos + 4;
+  return addAnalysisSectionContent(doc, content, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
 };
 
 // Format analysis report - improved readability
@@ -1059,19 +1118,28 @@ const addPhotosToPDF = async (
             }
           }
           
-          // Legend below photo
+          // Legend below photo - show FULL text for each marker
           if (photoMarkers.length > 0) {
             let legendY = photoY + photoHeight + 4;
             
-            doc.setFillColor(...COLORS.background);
-            const legendHeight = Math.min(photoMarkers.length * 4 + 4, 22);
-            drawRoundedRect(doc, xPos, legendY - 2, photoWidth, legendHeight, 2);
-            
             doc.setFontSize(7);
+            const maxLabelWidth = photoWidth - 14;
             
-            const maxItems = 4;
-            for (let k = 0; k < Math.min(photoMarkers.length, maxItems); k++) {
+            // Calculate total height needed for all markers with wrapped text
+            let totalLegendHeight = 4;
+            const markerLineInfo: { lines: string[]; lineCount: number }[] = [];
+            for (const marker of photoMarkers) {
+              const labelLines = doc.splitTextToSize(marker.label, maxLabelWidth);
+              markerLineInfo.push({ lines: labelLines, lineCount: labelLines.length });
+              totalLegendHeight += labelLines.length * 3.5 + 2;
+            }
+            
+            doc.setFillColor(...COLORS.background);
+            drawRoundedRect(doc, xPos, legendY - 2, photoWidth, totalLegendHeight, 2);
+            
+            for (let k = 0; k < photoMarkers.length; k++) {
               const marker = photoMarkers[k];
+              const labelLines = markerLineInfo[k].lines;
               
               // Number badge
               doc.setFillColor(...COLORS.danger);
@@ -1080,20 +1148,14 @@ const addPhotosToPDF = async (
               doc.setFont('helvetica', 'bold');
               doc.text((k + 1).toString(), xPos + 5, legendY + 1.7, { align: 'center' });
               
-              // Label - show full text, wrapping if needed
+              // Label - show ALL lines (full text)
               doc.setTextColor(...COLORS.text);
               doc.setFont('helvetica', 'normal');
-              const maxLabelWidth = photoWidth - 14;
-              const labelLines = doc.splitTextToSize(marker.label, maxLabelWidth);
-              doc.text(labelLines[0], xPos + 9, legendY + 2);
+              labelLines.forEach((labelLine: string, lineIdx: number) => {
+                doc.text(labelLine, xPos + 9, legendY + 2 + (lineIdx * 3.5));
+              });
               
-              legendY += 4;
-            }
-            
-            if (photoMarkers.length > maxItems) {
-              doc.setFont('helvetica', 'italic');
-              doc.setTextColor(...COLORS.textMuted);
-              doc.text(`+ ${photoMarkers.length - maxItems} more`, xPos + 5, legendY + 1);
+              legendY += labelLines.length * 3.5 + 2;
             }
           }
         }
@@ -1386,53 +1448,42 @@ export const generateJobPDF = async (
     
     yPos += 10;
     
-    // Executive summary for this rug
+    // Executive summary for this rug (includes type, dimensions, short appraisal, cost)
     if (rug.analysis_report) {
       yPos = addExecutiveSummary(doc, rug, yPos, margin, pageWidth);
     }
     
-    // Rug details card - only show notes if present
-    const rugInfoData: [string, string][] = [
-      ['Type', rug.rug_type],
-      ['Dimensions', rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : '—'],
-    ];
-    if (rug.notes && rug.notes.trim()) {
-      rugInfoData.push(['Notes', rug.notes]);
-    }
-    yPos = addInfoCard(doc, rugInfoData, yPos, margin, pageWidth - margin * 2);
-    
     yPos += 3;
     
-    // REORDERED SECTIONS: 1. Professional Analysis, 2. Service Descriptions, 3. Inspection Photos, 4. Service Estimate, 5. Additional Services
-    
+    // STREAMLINED SECTIONS: Combined analysis content without redundant headers
     if (rug.analysis_report) {
       const sections = parseAnalysisSections(rug.analysis_report);
       
-      // 1. Professional Analysis (first)
-      if (sections.professionalAnalysis.trim() || sections.otherContent.trim()) {
-        const analysisContent = sections.professionalAnalysis || sections.otherContent;
-        yPos = addAnalysisSection(doc, analysisContent, 'Professional Analysis', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
-      }
+      // Combined Professional Analysis + Service Descriptions (content only, no separate headers)
+      const combinedContent = [
+        sections.professionalAnalysis,
+        sections.serviceDescriptions,
+        sections.otherContent
+      ].filter(s => s.trim()).join('\n\n');
       
-      // 2. Comprehensive Service Descriptions
-      if (sections.serviceDescriptions.trim()) {
-        yPos = addAnalysisSection(doc, sections.serviceDescriptions, 'Comprehensive Service Descriptions', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+      if (combinedContent.trim()) {
+        yPos = addAnalysisSectionContent(doc, combinedContent, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       }
     }
     
-    // 3. Inspection Photos - 2-up layout
+    // Inspection Photos - 2-up layout
     if (rug.photo_urls && rug.photo_urls.length > 0) {
       yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations);
     }
     
-    // 4. Service Estimate (Cost breakdown)
+    // Service Estimate (Cost breakdown)
     if (rug.analysis_report) {
       yPos = addCostBreakdown(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       
-      // 5. Additional Recommended Services
+      // Additional Services - content only, no header or intro text
       const sections = parseAnalysisSections(rug.analysis_report);
       if (sections.additionalServices.trim()) {
-        yPos = addAnalysisSection(doc, sections.additionalServices, 'Additional Recommended Services', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+        yPos = addAnalysisSectionContent(doc, sections.additionalServices, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       }
     }
   }
@@ -1584,52 +1635,42 @@ export const generateJobPDFBase64 = async (
     
     yPos += 10;
     
+    // Executive summary (includes type, dimensions, short appraisal, cost)
     if (rug.analysis_report) {
       yPos = addExecutiveSummary(doc, rug, yPos, margin, pageWidth);
     }
     
-    // Rug details - only show notes if present
-    const rugInfoData2: [string, string][] = [
-      ['Type', rug.rug_type],
-      ['Dimensions', rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : '—'],
-    ];
-    if (rug.notes && rug.notes.trim()) {
-      rugInfoData2.push(['Notes', rug.notes]);
-    }
-    yPos = addInfoCard(doc, rugInfoData2, yPos, margin, pageWidth - margin * 2);
-    
     yPos += 3;
     
-    // REORDERED SECTIONS: 1. Professional Analysis, 2. Service Descriptions, 3. Inspection Photos, 4. Service Estimate, 5. Additional Services
-    
+    // STREAMLINED SECTIONS: Combined analysis content without redundant headers
     if (rug.analysis_report) {
       const sections = parseAnalysisSections(rug.analysis_report);
       
-      // 1. Professional Analysis (first)
-      if (sections.professionalAnalysis.trim() || sections.otherContent.trim()) {
-        const analysisContent = sections.professionalAnalysis || sections.otherContent;
-        yPos = addAnalysisSection(doc, analysisContent, 'Professional Analysis', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
-      }
+      // Combined Professional Analysis + Service Descriptions (content only)
+      const combinedContent = [
+        sections.professionalAnalysis,
+        sections.serviceDescriptions,
+        sections.otherContent
+      ].filter(s => s.trim()).join('\n\n');
       
-      // 2. Comprehensive Service Descriptions
-      if (sections.serviceDescriptions.trim()) {
-        yPos = addAnalysisSection(doc, sections.serviceDescriptions, 'Comprehensive Service Descriptions', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+      if (combinedContent.trim()) {
+        yPos = addAnalysisSectionContent(doc, combinedContent, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       }
     }
     
-    // 3. Inspection Photos
+    // Inspection Photos
     if (rug.photo_urls && rug.photo_urls.length > 0) {
       yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations, true);
     }
     
-    // 4. Service Estimate (Cost breakdown)
+    // Service Estimate (Cost breakdown)
     if (rug.analysis_report) {
       yPos = addCostBreakdown(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       
-      // 5. Additional Recommended Services
+      // Additional Services - content only
       const sections = parseAnalysisSections(rug.analysis_report);
       if (sections.additionalServices.trim()) {
-        yPos = addAnalysisSection(doc, sections.additionalServices, 'Additional Recommended Services', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+        yPos = addAnalysisSectionContent(doc, sections.additionalServices, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       }
     }
   }
