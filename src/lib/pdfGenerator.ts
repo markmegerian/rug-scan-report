@@ -633,7 +633,7 @@ const addCostBreakdown = (
     yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
   }
   
-  yPos = addSectionHeader(doc, 'Service Estimate', yPos, margin, pageWidth);
+  yPos = addSectionHeader(doc, 'Detailed Breakdown', yPos, margin, pageWidth);
   yPos += 2;
   
   // Build table data
@@ -1455,36 +1455,37 @@ export const generateJobPDF = async (
     
     yPos += 3;
     
-    // STREAMLINED SECTIONS: Combined analysis content without redundant headers
+    // SECTION ORDER (per reference PDF):
+    // 1. Comprehensive Service Descriptions (detailed service explanations)
+    // 2. Detailed Breakdown (cost table)
+    // 3. Strongly Recommended Additional Protection
+    
     if (rug.analysis_report) {
       const sections = parseAnalysisSections(rug.analysis_report);
       
-      // Combined Professional Analysis + Service Descriptions (content only, no separate headers)
-      const combinedContent = [
+      // 1. Comprehensive Service Descriptions (professional analysis + service details)
+      const serviceContent = [
         sections.professionalAnalysis,
         sections.serviceDescriptions,
         sections.otherContent
       ].filter(s => s.trim()).join('\n\n');
       
-      if (combinedContent.trim()) {
-        yPos = addAnalysisSectionContent(doc, combinedContent, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+      if (serviceContent.trim()) {
+        yPos = addAnalysisSection(doc, serviceContent, 'Comprehensive Service Descriptions', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       }
-    }
-    
-    // Inspection Photos - 2-up layout
-    if (rug.photo_urls && rug.photo_urls.length > 0) {
-      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations);
-    }
-    
-    // Service Estimate (Cost breakdown)
-    if (rug.analysis_report) {
+      
+      // 2. Detailed Breakdown (cost table)
       yPos = addCostBreakdown(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       
-      // Additional Services - content only, no header or intro text
-      const sections = parseAnalysisSections(rug.analysis_report);
+      // 3. Strongly Recommended Additional Protection
       if (sections.additionalServices.trim()) {
-        yPos = addAnalysisSectionContent(doc, sections.additionalServices, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+        yPos = addAnalysisSection(doc, sections.additionalServices, 'Strongly Recommended Additional Protection', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       }
+    }
+    
+    // Inspection Photos - 2-up layout (after all text sections)
+    if (rug.photo_urls && rug.photo_urls.length > 0) {
+      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations);
     }
   }
   
@@ -1642,36 +1643,37 @@ export const generateJobPDFBase64 = async (
     
     yPos += 3;
     
-    // STREAMLINED SECTIONS: Combined analysis content without redundant headers
+    // SECTION ORDER (per reference PDF):
+    // 1. Comprehensive Service Descriptions (detailed service explanations)
+    // 2. Detailed Breakdown (cost table)
+    // 3. Strongly Recommended Additional Protection
+    
     if (rug.analysis_report) {
       const sections = parseAnalysisSections(rug.analysis_report);
       
-      // Combined Professional Analysis + Service Descriptions (content only)
-      const combinedContent = [
+      // 1. Comprehensive Service Descriptions (professional analysis + service details)
+      const serviceContent = [
         sections.professionalAnalysis,
         sections.serviceDescriptions,
         sections.otherContent
       ].filter(s => s.trim()).join('\n\n');
       
-      if (combinedContent.trim()) {
-        yPos = addAnalysisSectionContent(doc, combinedContent, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+      if (serviceContent.trim()) {
+        yPos = addAnalysisSection(doc, serviceContent, 'Comprehensive Service Descriptions', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       }
-    }
-    
-    // Inspection Photos
-    if (rug.photo_urls && rug.photo_urls.length > 0) {
-      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations, true);
-    }
-    
-    // Service Estimate (Cost breakdown)
-    if (rug.analysis_report) {
+      
+      // 2. Detailed Breakdown (cost table)
       yPos = addCostBreakdown(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       
-      // Additional Services - content only
-      const sections = parseAnalysisSections(rug.analysis_report);
+      // 3. Strongly Recommended Additional Protection
       if (sections.additionalServices.trim()) {
-        yPos = addAnalysisSectionContent(doc, sections.additionalServices, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+        yPos = addAnalysisSection(doc, sections.additionalServices, 'Strongly Recommended Additional Protection', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
       }
+    }
+    
+    // Inspection Photos - 2-up layout (after all text sections)
+    if (rug.photo_urls && rug.photo_urls.length > 0) {
+      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations, true);
     }
   }
   
