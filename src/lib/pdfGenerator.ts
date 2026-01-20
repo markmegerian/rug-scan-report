@@ -1316,6 +1316,254 @@ export const generatePDF = async (
   doc.save(fileName);
 };
 
+// Helper to extract unique services from all rugs
+const extractConsolidatedServices = (rugs: Inspection[]): string => {
+  const allServiceLines: string[] = [];
+  const seenServices = new Set<string>();
+  
+  for (const rug of rugs) {
+    if (!rug.analysis_report) continue;
+    
+    const sections = parseAnalysisSections(rug.analysis_report);
+    const serviceContent = [
+      sections.professionalAnalysis,
+      sections.serviceDescriptions,
+      sections.otherContent
+    ].filter(s => s.trim()).join('\n\n');
+    
+    // Extract individual service descriptions (paragraphs)
+    const lines = serviceContent.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      
+      // Create a normalized key for deduplication
+      const normalizedKey = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 50);
+      
+      if (!seenServices.has(normalizedKey)) {
+        seenServices.add(normalizedKey);
+        allServiceLines.push(trimmed);
+      }
+    }
+  }
+  
+  return allServiceLines.join('\n');
+};
+
+// Helper to extract consolidated additional services
+const extractConsolidatedAdditionalServices = (rugs: Inspection[]): string => {
+  const allAdditionalLines: string[] = [];
+  const seenAdditional = new Set<string>();
+  
+  for (const rug of rugs) {
+    if (!rug.analysis_report) continue;
+    
+    const sections = parseAnalysisSections(rug.analysis_report);
+    if (!sections.additionalServices.trim()) continue;
+    
+    const lines = sections.additionalServices.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      
+      const normalizedKey = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 50);
+      
+      if (!seenAdditional.has(normalizedKey)) {
+        seenAdditional.add(normalizedKey);
+        allAdditionalLines.push(trimmed);
+      }
+    }
+  }
+  
+  return allAdditionalLines.join('\n');
+};
+
+// Combined cost breakdown for all rugs with per-rug subtotals
+const addCombinedCostBreakdown = (
+  doc: jsPDF,
+  rugs: Inspection[],
+  yPos: number,
+  margin: number,
+  pageWidth: number,
+  pageHeight: number,
+  branding?: BusinessBranding | null,
+  cachedLogoBase64?: string | null
+): number => {
+  // Check for page break
+  if (yPos > pageHeight - 60) {
+    doc.addPage();
+    yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+  }
+  
+  yPos = addSectionHeader(doc, 'Detailed Cost Breakdown', yPos, margin, pageWidth);
+  yPos += 2;
+  
+  // Build table data with all rugs
+  const tableData: string[][] = [];
+  let grandTotal = 0;
+  
+  for (const rug of rugs) {
+    if (!rug.analysis_report) continue;
+    
+    const costLines = extractCostLines(rug.analysis_report);
+    if (costLines.length === 0) continue;
+    
+    // Rug header row
+    const sizeStr = rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : '';
+    const rugHeader = `Rug ${rug.rug_number}${sizeStr ? ` (${sizeStr})` : ''}`;
+    tableData.push([rugHeader, '', '']);
+    
+    // Line items for this rug
+    let rugSubtotal = 0;
+    for (const line of costLines) {
+      const isTotal = /total|subtotal/i.test(line.text);
+      
+      if (isTotal) {
+        // Extract the total value for subtotal
+        const costValue = parseFloat(line.cost.replace(/[$,]/g, '')) || 0;
+        rugSubtotal = costValue;
+      } else {
+        // Regular line item - indent slightly
+        const costValue = parseFloat(line.cost.replace(/[$,]/g, '')) || 0;
+        tableData.push([`  ${line.text.replace(/[:.]?\s*\$.*$/, '')}`, '', line.cost]);
+      }
+    }
+    
+    // Rug subtotal row
+    if (rugSubtotal > 0) {
+      tableData.push([`Subtotal for Rug ${rug.rug_number}`, '', `$${rugSubtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`]);
+      grandTotal += rugSubtotal;
+    }
+    
+    // Spacer row between rugs
+    tableData.push(['', '', '']);
+  }
+  
+  // Grand total row
+  if (grandTotal > 0) {
+    tableData.push([`TOTAL ESTIMATE`, '', `$${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`]);
+  }
+  
+  autoTable(doc, {
+    startY: yPos,
+    body: tableData,
+    theme: 'plain',
+    styles: {
+      fontSize: 9,
+      cellPadding: { top: 3, bottom: 3, left: 4, right: 4 },
+      textColor: COLORS.text,
+    },
+    columnStyles: {
+      0: { cellWidth: pageWidth - margin * 2 - 45 },
+      1: { cellWidth: 5 },
+      2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' },
+    },
+    didParseCell: (data) => {
+      const text = data.row.raw?.[0] as string || '';
+      const isRugHeader = /^Rug\s+[A-Za-z0-9\-]+/.test(text) && !text.includes('Subtotal');
+      const isSubtotal = /subtotal/i.test(text);
+      const isGrandTotal = /^TOTAL ESTIMATE/i.test(text);
+      const isSpacer = text === '' && (data.row.raw?.[2] as string || '') === '';
+      
+      if (isSpacer) {
+        data.cell.styles.minCellHeight = 4;
+      } else if (isRugHeader) {
+        data.cell.styles.fillColor = COLORS.primary;
+        data.cell.styles.textColor = COLORS.white;
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fontSize = 10;
+      } else if (isSubtotal) {
+        data.cell.styles.fillColor = COLORS.background;
+        data.cell.styles.fontStyle = 'bold';
+        if (data.column.index === 2) {
+          data.cell.styles.textColor = COLORS.primaryLight;
+        }
+      } else if (isGrandTotal) {
+        data.cell.styles.fillColor = [245, 243, 238];
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fontSize = 11;
+        if (data.column.index === 2) {
+          data.cell.styles.textColor = COLORS.primary;
+          data.cell.styles.fontSize = 12;
+        }
+      }
+    },
+    margin: { left: margin, right: margin },
+  });
+  
+  return (doc as any).lastAutoTable.finalY + 8;
+};
+
+// Add photos section organized by rug
+const addPhotosByRug = async (
+  doc: jsPDF,
+  rugs: Inspection[],
+  yPos: number,
+  margin: number,
+  pageWidth: number,
+  pageHeight: number,
+  branding?: BusinessBranding | null,
+  cachedLogoBase64?: string | null
+): Promise<number> => {
+  // Start photos on new page
+  doc.addPage();
+  yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+  
+  yPos = addSectionHeader(doc, 'Inspection Photos', yPos, margin, pageWidth);
+  yPos += 5;
+  
+  for (let rugIndex = 0; rugIndex < rugs.length; rugIndex++) {
+    const rug = rugs[rugIndex];
+    if (!rug.photo_urls || rug.photo_urls.length === 0) continue;
+    
+    // Check for page break before rug section
+    if (yPos > pageHeight - 80) {
+      doc.addPage();
+      yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+    }
+    
+    // Rug section header
+    const sizeStr = rug.length && rug.width ? `${rug.length}' × ${rug.width}'` : '';
+    doc.setFillColor(...COLORS.primary);
+    const rugLabelText = `Rug ${rug.rug_number}${sizeStr ? ` (${sizeStr})` : ''}`;
+    const labelWidth = Math.min(doc.getTextWidth(rugLabelText) * 1.5 + 16, pageWidth - margin * 2);
+    drawRoundedRect(doc, margin, yPos - 3, labelWidth, 9, 2);
+    
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.white);
+    doc.text(rugLabelText, margin + 6, yPos + 3);
+    yPos += 14;
+    
+    // Add photos for this rug
+    yPos = await addPhotosToPDF(
+      doc, 
+      rug.photo_urls, 
+      yPos, 
+      margin, 
+      pageWidth, 
+      pageHeight, 
+      branding, 
+      cachedLogoBase64, 
+      rug.image_annotations,
+      false // Don't add section header since we already have rug header
+    );
+    
+    // Add separator between rugs (except last)
+    if (rugIndex < rugs.length - 1) {
+      if (yPos > pageHeight - 40) {
+        doc.addPage();
+        yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+      } else {
+        addDivider(doc, yPos, margin, pageWidth, false);
+        yPos += 12;
+      }
+    }
+  }
+  
+  return yPos;
+};
+
 export const generateJobPDF = async (
   job: Job,
   rugs: Inspection[],
@@ -1448,67 +1696,55 @@ export const generateJobPDF = async (
     },
   });
   
-  // Individual rug reports
-  for (const rug of rugs) {
+  yPos = (doc as any).lastAutoTable.finalY + 10;
+  
+  // ==== SECTION 1: Comprehensive Service Descriptions (consolidated from all rugs) ====
+  const consolidatedServices = extractConsolidatedServices(rugs);
+  if (consolidatedServices.trim()) {
+    // Start on new page for service descriptions
     doc.addPage();
     yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
     
-    // Rug title with badge
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...COLORS.text);
-    doc.text(`Rug: ${rug.rug_number}`, margin, yPos);
-    
-    // Status badge
-    if (rug.analysis_report) {
-      doc.setFillColor(...COLORS.success);
-      doc.roundedRect(pageWidth - margin - 22, yPos - 5, 22, 7, 2, 2, 'F');
-      doc.setFontSize(6);
-      doc.setTextColor(...COLORS.white);
-      doc.text('ANALYZED', pageWidth - margin - 11, yPos - 0.5, { align: 'center' });
-    }
-    
-    yPos += 10;
-    
-    // Executive summary for this rug (includes type, dimensions, short appraisal, cost)
-    if (rug.analysis_report) {
-      yPos = addExecutiveSummary(doc, rug, yPos, margin, pageWidth);
-    }
-    
-    yPos += 3;
-    
-    // SECTION ORDER (per reference PDF):
-    // 1. Comprehensive Service Descriptions (detailed service explanations)
-    // 2. Detailed Breakdown (cost table)
-    // 3. Strongly Recommended Additional Protection
-    
-    if (rug.analysis_report) {
-      const sections = parseAnalysisSections(rug.analysis_report);
-      
-      // 1. Comprehensive Service Descriptions (professional analysis + service details)
-      const serviceContent = [
-        sections.professionalAnalysis,
-        sections.serviceDescriptions,
-        sections.otherContent
-      ].filter(s => s.trim()).join('\n\n');
-      
-      if (serviceContent.trim()) {
-        yPos = addAnalysisSection(doc, serviceContent, 'Comprehensive Service Descriptions', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
-      }
-      
-      // 2. Detailed Breakdown (cost table)
-      yPos = addCostBreakdown(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
-      
-      // 3. Strongly Recommended Additional Protection
-      if (sections.additionalServices.trim()) {
-        yPos = addAnalysisSection(doc, sections.additionalServices, 'Strongly Recommended Additional Protection', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
-      }
-    }
-    
-    // Inspection Photos - 2-up layout (after all text sections)
-    if (rug.photo_urls && rug.photo_urls.length > 0) {
-      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations);
-    }
+    yPos = addAnalysisSection(
+      doc, 
+      consolidatedServices, 
+      'Comprehensive Service Descriptions', 
+      yPos, 
+      margin, 
+      pageWidth, 
+      pageHeight, 
+      branding, 
+      cachedLogoBase64
+    );
+  }
+  
+  // ==== SECTION BREAK / New section starts ====
+  doc.addPage();
+  yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+  
+  // ==== SECTION 2: Combined Cost Breakdown with per-rug subtotals ====
+  yPos = addCombinedCostBreakdown(doc, rugs, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+  
+  // ==== SECTION 3: Strongly Recommended Additional Protection (once for all rugs) ====
+  const consolidatedAdditional = extractConsolidatedAdditionalServices(rugs);
+  if (consolidatedAdditional.trim()) {
+    yPos = addAnalysisSection(
+      doc, 
+      consolidatedAdditional, 
+      'Strongly Recommended Additional Protection', 
+      yPos, 
+      margin, 
+      pageWidth, 
+      pageHeight, 
+      branding, 
+      cachedLogoBase64
+    );
+  }
+  
+  // ==== SECTION 4: Inspection Photos (organized by rug) ====
+  const hasAnyPhotos = rugs.some(r => r.photo_urls && r.photo_urls.length > 0);
+  if (hasAnyPhotos) {
+    yPos = await addPhotosByRug(doc, rugs, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
   }
   
   // Add footers
@@ -1564,26 +1800,26 @@ export const generateJobPDFBase64 = async (
   const cardWidth = (pageWidth - margin * 2 - 10) / 2;
   
   yPos = addSectionHeader(doc, 'Job Information', yPos, margin, pageWidth);
-  const statusDisplay2 = job.status.charAt(0).toUpperCase() + job.status.slice(1).replace('-', ' ');
-  const jobCardY2 = yPos;
+  const statusDisplay = job.status.charAt(0).toUpperCase() + job.status.slice(1).replace('-', ' ');
+  const jobCardY = yPos;
   yPos = addInfoCard(doc, [
-    ['Status', statusDisplay2],
+    ['Status', statusDisplay],
     ['Date', format(new Date(job.created_at), 'MMM d, yyyy')],
     ['Total Rugs', rugs.length.toString()],
   ], yPos, margin, cardWidth);
   
   // Client info card - only show Notes if present
-  const clientInfoData2: [string, string][] = [
+  const clientInfoData: [string, string][] = [
     ['Name', job.client_name],
     ['Email', job.client_email || '—'],
     ['Phone', job.client_phone || '—'],
   ];
   if (job.notes && job.notes.trim()) {
-    clientInfoData2.push(['Notes', job.notes.length > 25 ? job.notes.substring(0, 22) + '...' : job.notes]);
+    clientInfoData.push(['Notes', job.notes.length > 25 ? job.notes.substring(0, 22) + '...' : job.notes]);
   }
   
-  addSectionHeader(doc, 'Client Information', jobCardY2 - 14, margin + cardWidth + 10, pageWidth);
-  addInfoCard(doc, clientInfoData2, jobCardY2, margin + cardWidth + 10, cardWidth);
+  addSectionHeader(doc, 'Client Information', jobCardY - 14, margin + cardWidth + 10, pageWidth);
+  addInfoCard(doc, clientInfoData, jobCardY, margin + cardWidth + 10, cardWidth);
   
   yPos += 5;
   
@@ -1591,7 +1827,7 @@ export const generateJobPDFBase64 = async (
   yPos = addSectionHeader(doc, 'Rugs Summary', yPos, margin, pageWidth);
   
   // Pre-load thumbnails before rendering table
-  const thumbnails2: (string | null)[] = await Promise.all(
+  const thumbnails: (string | null)[] = await Promise.all(
     rugs.map(async (rug) => {
       if (rug.photo_urls && rug.photo_urls.length > 0) {
         try {
@@ -1604,7 +1840,7 @@ export const generateJobPDFBase64 = async (
     })
   );
   
-  const rugsSummary2 = rugs.map((rug) => [
+  const rugsSummary = rugs.map((rug) => [
     '', // Thumbnail placeholder
     rug.rug_number,
     rug.rug_type,
@@ -1614,7 +1850,7 @@ export const generateJobPDFBase64 = async (
   autoTable(doc, {
     startY: yPos,
     head: [['', 'Rug Number', 'Type', 'Dimensions']],
-    body: rugsSummary2,
+    body: rugsSummary,
     theme: 'plain',
     styles: { fontSize: 8, cellPadding: 3, textColor: COLORS.text, minCellHeight: 12 },
     headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: 'bold', fontSize: 8 },
@@ -1623,7 +1859,7 @@ export const generateJobPDFBase64 = async (
     margin: { left: margin, right: margin },
     didDrawCell: (data) => {
       if (data.column.index === 0 && data.section === 'body') {
-        const thumbBase64 = thumbnails2[data.row.index];
+        const thumbBase64 = thumbnails[data.row.index];
         if (thumbBase64) {
           try {
             const thumbSize = 10;
@@ -1638,65 +1874,54 @@ export const generateJobPDFBase64 = async (
     },
   });
   
-  // Individual rug reports
-  for (const rug of rugs) {
+  yPos = (doc as any).lastAutoTable.finalY + 10;
+  
+  // ==== SECTION 1: Comprehensive Service Descriptions (consolidated from all rugs) ====
+  const consolidatedServices = extractConsolidatedServices(rugs);
+  if (consolidatedServices.trim()) {
     doc.addPage();
     yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
     
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...COLORS.text);
-    doc.text(`Rug: ${rug.rug_number}`, margin, yPos);
-    
-    if (rug.analysis_report) {
-      doc.setFillColor(...COLORS.success);
-      doc.roundedRect(pageWidth - margin - 22, yPos - 5, 22, 7, 2, 2, 'F');
-      doc.setFontSize(6);
-      doc.setTextColor(...COLORS.white);
-      doc.text('ANALYZED', pageWidth - margin - 11, yPos - 0.5, { align: 'center' });
-    }
-    
-    yPos += 10;
-    
-    // Executive summary (includes type, dimensions, short appraisal, cost)
-    if (rug.analysis_report) {
-      yPos = addExecutiveSummary(doc, rug, yPos, margin, pageWidth);
-    }
-    
-    yPos += 3;
-    
-    // SECTION ORDER (per reference PDF):
-    // 1. Comprehensive Service Descriptions (detailed service explanations)
-    // 2. Detailed Breakdown (cost table)
-    // 3. Strongly Recommended Additional Protection
-    
-    if (rug.analysis_report) {
-      const sections = parseAnalysisSections(rug.analysis_report);
-      
-      // 1. Comprehensive Service Descriptions (professional analysis + service details)
-      const serviceContent = [
-        sections.professionalAnalysis,
-        sections.serviceDescriptions,
-        sections.otherContent
-      ].filter(s => s.trim()).join('\n\n');
-      
-      if (serviceContent.trim()) {
-        yPos = addAnalysisSection(doc, serviceContent, 'Comprehensive Service Descriptions', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
-      }
-      
-      // 2. Detailed Breakdown (cost table)
-      yPos = addCostBreakdown(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
-      
-      // 3. Strongly Recommended Additional Protection
-      if (sections.additionalServices.trim()) {
-        yPos = addAnalysisSection(doc, sections.additionalServices, 'Strongly Recommended Additional Protection', yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
-      }
-    }
-    
-    // Inspection Photos - 2-up layout (after all text sections)
-    if (rug.photo_urls && rug.photo_urls.length > 0) {
-      yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations, true);
-    }
+    yPos = addAnalysisSection(
+      doc, 
+      consolidatedServices, 
+      'Comprehensive Service Descriptions', 
+      yPos, 
+      margin, 
+      pageWidth, 
+      pageHeight, 
+      branding, 
+      cachedLogoBase64
+    );
+  }
+  
+  // ==== SECTION BREAK / New section starts ====
+  doc.addPage();
+  yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+  
+  // ==== SECTION 2: Combined Cost Breakdown with per-rug subtotals ====
+  yPos = addCombinedCostBreakdown(doc, rugs, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+  
+  // ==== SECTION 3: Strongly Recommended Additional Protection (once for all rugs) ====
+  const consolidatedAdditional = extractConsolidatedAdditionalServices(rugs);
+  if (consolidatedAdditional.trim()) {
+    yPos = addAnalysisSection(
+      doc, 
+      consolidatedAdditional, 
+      'Strongly Recommended Additional Protection', 
+      yPos, 
+      margin, 
+      pageWidth, 
+      pageHeight, 
+      branding, 
+      cachedLogoBase64
+    );
+  }
+  
+  // ==== SECTION 4: Inspection Photos (organized by rug) ====
+  const hasAnyPhotos = rugs.some(r => r.photo_urls && r.photo_urls.length > 0);
+  if (hasAnyPhotos) {
+    yPos = await addPhotosByRug(doc, rugs, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
   }
   
   // Footers
