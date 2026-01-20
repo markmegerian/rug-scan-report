@@ -48,18 +48,35 @@ export interface BusinessBranding {
   logo_url: string | null;
 }
 
-// Color palette
+// Refined color palette - soft elegance with professional tones
 const COLORS = {
-  primary: [30, 64, 175] as [number, number, number],     // Deep blue
-  primaryLight: [59, 130, 246] as [number, number, number], // Light blue
-  secondary: [100, 116, 139] as [number, number, number],  // Slate
-  accent: [245, 158, 11] as [number, number, number],      // Amber
-  text: [15, 23, 42] as [number, number, number],          // Slate 900
-  textMuted: [100, 116, 139] as [number, number, number],  // Slate 500
-  border: [226, 232, 240] as [number, number, number],     // Slate 200
-  background: [248, 250, 252] as [number, number, number], // Slate 50
+  // Primary - Soft navy for elevated feel
+  primary: [30, 58, 95] as [number, number, number],
+  primaryLight: [51, 85, 127] as [number, number, number],
+  
+  // Accent - Warm bronze/gold for elegance
+  accent: [166, 134, 89] as [number, number, number],
+  accentLight: [201, 177, 140] as [number, number, number],
+  
+  // Neutrals - Warm grays
+  text: [35, 35, 40] as [number, number, number],
+  textMuted: [120, 120, 125] as [number, number, number],
+  textLight: [160, 160, 165] as [number, number, number],
+  
+  // Backgrounds - Very subtle warm tones
+  background: [249, 249, 247] as [number, number, number],
+  backgroundWarm: [252, 250, 245] as [number, number, number],
+  cardBg: [255, 255, 253] as [number, number, number],
+  
+  // Borders and dividers
+  border: [230, 228, 222] as [number, number, number],
+  borderLight: [240, 238, 232] as [number, number, number],
+  
+  // Standard colors
   white: [255, 255, 255] as [number, number, number],
-  success: [34, 197, 94] as [number, number, number],      // Green
+  success: [76, 140, 100] as [number, number, number],
+  warning: [180, 130, 50] as [number, number, number],
+  danger: [180, 70, 70] as [number, number, number],
 };
 
 // Default RugBoost logo as base64 PNG (fallback when no custom logo)
@@ -75,7 +92,6 @@ const compressImage = (
   const canvas = document.createElement('canvas');
   let { width, height } = img;
   
-  // Calculate new dimensions while maintaining aspect ratio
   if (width > maxWidth) {
     height = (height * maxWidth) / width;
     width = maxWidth;
@@ -96,18 +112,15 @@ const compressImage = (
 };
 
 // Helper function to load image, compress it, and convert to base64
-// forEmail: use more aggressive compression for email attachments
 const loadImageAsBase64 = async (url: string, forEmail: boolean = false): Promise<string | null> => {
   try {
     const response = await fetch(url);
     const blob = await response.blob();
     
-    // Compress images for PDF (especially for email to keep size down)
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
         try {
-          // More aggressive compression for email PDFs
           const maxW = forEmail ? 400 : 600;
           const maxH = forEmail ? 300 : 450;
           const quality = forEmail ? 0.35 : 0.5;
@@ -144,7 +157,42 @@ const drawRoundedRect = (
   doc.roundedRect(x, y, width, height, radius, radius, fill ? 'F' : stroke ? 'S' : '');
 };
 
-// Professional header with logo
+// Elegant thin divider line
+const addDivider = (
+  doc: jsPDF,
+  y: number,
+  margin: number,
+  pageWidth: number,
+  withOrnament: boolean = false
+) => {
+  doc.setDrawColor(...COLORS.borderLight);
+  doc.setLineWidth(0.3);
+  
+  if (withOrnament) {
+    const centerX = pageWidth / 2;
+    const lineWidth = pageWidth - margin * 2;
+    const ornamentWidth = 8;
+    
+    // Left line
+    doc.line(margin, y, centerX - ornamentWidth, y);
+    // Right line
+    doc.line(centerX + ornamentWidth, y, pageWidth - margin, y);
+    
+    // Small diamond ornament in center
+    doc.setFillColor(...COLORS.accent);
+    const size = 1.5;
+    doc.moveTo(centerX, y - size);
+    doc.lineTo(centerX + size, y);
+    doc.lineTo(centerX, y + size);
+    doc.lineTo(centerX - size, y);
+    doc.close();
+    doc.fill();
+  } else {
+    doc.line(margin, y, pageWidth - margin, y);
+  }
+};
+
+// Professional header - refined and elegant
 const addProfessionalHeader = async (
   doc: jsPDF,
   pageWidth: number,
@@ -152,15 +200,15 @@ const addProfessionalHeader = async (
   cachedLogoBase64?: string | null
 ): Promise<{ yPos: number; logoBase64: string | null }> => {
   const margin = 15;
-  const headerHeight = 45;
+  const headerHeight = 35;
   
-  // Header background
+  // Clean header background with subtle gradient effect
   doc.setFillColor(...COLORS.primary);
   doc.rect(0, 0, pageWidth, headerHeight, 'F');
   
-  // Add subtle gradient effect with lighter strip
-  doc.setFillColor(...COLORS.primaryLight);
-  doc.rect(0, headerHeight - 3, pageWidth, 3, 'F');
+  // Thin accent line at bottom
+  doc.setFillColor(...COLORS.accent);
+  doc.rect(0, headerHeight - 1, pageWidth, 1, 'F');
   
   const businessName = branding?.business_name || 'RugBoost';
   let logoBase64 = cachedLogoBase64;
@@ -173,7 +221,7 @@ const addProfessionalHeader = async (
   }
   
   // Logo
-  const logoSize = 25;
+  const logoSize = 20;
   const logoX = margin;
   const logoY = (headerHeight - logoSize) / 2;
   
@@ -181,27 +229,26 @@ const addProfessionalHeader = async (
     const format = logoBase64.includes('image/png') ? 'PNG' : 
                    logoBase64.includes('image/svg') ? 'SVG' : 'JPEG';
     
-    // White background circle for logo
     doc.setFillColor(...COLORS.white);
-    doc.circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2 + 2, 'F');
-    
+    doc.circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2 + 1, 'F');
     doc.addImage(logoBase64, format, logoX, logoY, logoSize, logoSize);
   } catch (error) {
     console.error('Failed to add logo:', error);
   }
   
-  // Company name
-  doc.setFontSize(20);
+  // Company name - elegant font sizing
+  doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.white);
-  doc.text(businessName, logoX + logoSize + 10, headerHeight / 2 + 2);
+  doc.text(businessName, logoX + logoSize + 8, headerHeight / 2 + 2);
   
-  // Contact info on right side
+  // Contact info on right side - lighter weight
   const rightX = pageWidth - margin;
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
+  doc.setTextColor(255, 255, 255, 0.9);
   
-  let infoY = 15;
+  let infoY = 12;
   if (branding?.business_phone) {
     doc.text(branding.business_phone, rightX, infoY, { align: 'right' });
     infoY += 5;
@@ -211,17 +258,17 @@ const addProfessionalHeader = async (
     infoY += 5;
   }
   if (branding?.business_address) {
-    const addressLines = doc.splitTextToSize(branding.business_address, 60);
-    addressLines.forEach((line: string) => {
+    const addressLines = doc.splitTextToSize(branding.business_address, 55);
+    addressLines.slice(0, 2).forEach((line: string) => {
       doc.text(line, rightX, infoY, { align: 'right' });
       infoY += 4;
     });
   }
   
-  return { yPos: headerHeight + 15, logoBase64 };
+  return { yPos: headerHeight + 12, logoBase64 };
 };
 
-// Sync version for subsequent pages
+// Sync version for subsequent pages - minimal header
 const addProfessionalHeaderSync = (
   doc: jsPDF,
   pageWidth: number,
@@ -229,18 +276,18 @@ const addProfessionalHeaderSync = (
   cachedLogoBase64?: string | null
 ): number => {
   const margin = 15;
-  const headerHeight = 35;
+  const headerHeight = 25;
   
   doc.setFillColor(...COLORS.primary);
   doc.rect(0, 0, pageWidth, headerHeight, 'F');
   
-  doc.setFillColor(...COLORS.primaryLight);
-  doc.rect(0, headerHeight - 2, pageWidth, 2, 'F');
+  doc.setFillColor(...COLORS.accent);
+  doc.rect(0, headerHeight - 0.5, pageWidth, 0.5, 'F');
   
   const businessName = branding?.business_name || 'RugBoost';
   const logoBase64 = cachedLogoBase64 || RUGBOOST_LOGO_BASE64;
   
-  const logoSize = 20;
+  const logoSize = 15;
   const logoX = margin;
   const logoY = (headerHeight - logoSize) / 2;
   
@@ -248,39 +295,203 @@ const addProfessionalHeaderSync = (
     const format = logoBase64.includes('image/png') ? 'PNG' : 
                    logoBase64.includes('image/svg') ? 'SVG' : 'JPEG';
     doc.setFillColor(...COLORS.white);
-    doc.circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2 + 1, 'F');
+    doc.circle(logoX + logoSize/2, logoY + logoSize/2, logoSize/2 + 0.5, 'F');
     doc.addImage(logoBase64, format, logoX, logoY, logoSize, logoSize);
   } catch (error) {
     console.error('Failed to add logo:', error);
   }
   
-  doc.setFontSize(16);
+  doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.white);
-  doc.text(businessName, logoX + logoSize + 8, headerHeight / 2 + 2);
+  doc.text(businessName, logoX + logoSize + 6, headerHeight / 2 + 1.5);
   
-  return headerHeight + 10;
+  return headerHeight + 8;
 };
 
-// Section header with accent bar
+// Section header - refined styling
 const addSectionHeader = (
   doc: jsPDF,
   title: string,
   yPos: number,
-  margin: number
+  margin: number,
+  pageWidth: number = 210
 ): number => {
-  doc.setFillColor(...COLORS.primary);
-  doc.rect(margin, yPos, 4, 8, 'F');
+  // Accent line
+  doc.setFillColor(...COLORS.accent);
+  doc.rect(margin, yPos, 3, 7, 'F');
   
-  doc.setFontSize(14);
+  doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(...COLORS.text);
-  doc.text(title, margin + 8, yPos + 6);
+  doc.setTextColor(...COLORS.primary);
+  doc.text(title, margin + 7, yPos + 5);
+  
+  // Thin underline
+  doc.setDrawColor(...COLORS.borderLight);
+  doc.setLineWidth(0.2);
+  doc.line(margin + 7, yPos + 8, pageWidth - margin, yPos + 8);
   
   return yPos + 14;
 };
 
-// Info card with background
+// Executive Summary Card - NEW
+const addExecutiveSummary = (
+  doc: jsPDF,
+  inspection: Inspection,
+  yPos: number,
+  margin: number,
+  pageWidth: number
+): number => {
+  const cardWidth = pageWidth - margin * 2;
+  
+  // Parse key findings from analysis
+  const analysis = inspection.analysis_report || '';
+  const findings = extractKeyFindings(analysis);
+  const estimatedCost = extractTotalCost(analysis);
+  const condition = assessCondition(analysis);
+  
+  // Card background
+  doc.setFillColor(...COLORS.cardBg);
+  const cardHeight = 50;
+  drawRoundedRect(doc, margin, yPos, cardWidth, cardHeight, 4);
+  
+  // Subtle border
+  doc.setDrawColor(...COLORS.border);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, yPos, cardWidth, cardHeight, 4, 4, 'S');
+  
+  // Card header with accent
+  doc.setFillColor(...COLORS.accent);
+  doc.rect(margin, yPos, cardWidth, 0.8, 'F');
+  
+  // "At a Glance" label
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.accent);
+  doc.text('AT A GLANCE', margin + 6, yPos + 7);
+  
+  // Left column - Rug info
+  let innerY = yPos + 14;
+  const col1X = margin + 6;
+  const col2X = margin + cardWidth / 2 + 10;
+  
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.text);
+  doc.text(`${inspection.rug_type}`, col1X, innerY);
+  
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...COLORS.textMuted);
+  const size = inspection.length && inspection.width 
+    ? `${inspection.length}' × ${inspection.width}'`
+    : 'Size not specified';
+  doc.text(`Rug #${inspection.rug_number} • ${size}`, col1X, innerY + 5);
+  
+  // Condition badge
+  const conditionColors = {
+    'Excellent': COLORS.success,
+    'Good': [100, 140, 80] as [number, number, number],
+    'Fair': COLORS.warning,
+    'Needs Attention': COLORS.danger,
+  };
+  const conditionColor = conditionColors[condition as keyof typeof conditionColors] || COLORS.textMuted;
+  
+  doc.setFillColor(...conditionColor);
+  const badgeWidth = doc.getTextWidth(condition) + 8;
+  drawRoundedRect(doc, col1X, innerY + 9, badgeWidth, 7, 2);
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...COLORS.white);
+  doc.text(condition, col1X + 4, innerY + 14);
+  
+  // Right column - Key findings and cost
+  innerY = yPos + 14;
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...COLORS.textMuted);
+  doc.text('Key Findings:', col2X, innerY);
+  
+  innerY += 5;
+  doc.setTextColor(...COLORS.text);
+  findings.slice(0, 2).forEach((finding, idx) => {
+    const truncated = finding.length > 35 ? finding.substring(0, 32) + '...' : finding;
+    doc.text(`• ${truncated}`, col2X, innerY + (idx * 4));
+  });
+  
+  // Cost estimate - prominent
+  if (estimatedCost) {
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.primary);
+    doc.text(estimatedCost, pageWidth - margin - 6, yPos + 38, { align: 'right' });
+    
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...COLORS.textMuted);
+    doc.text('Estimated Total', pageWidth - margin - 6, yPos + 43, { align: 'right' });
+  }
+  
+  return yPos + cardHeight + 8;
+};
+
+// Helper to extract key findings from analysis
+const extractKeyFindings = (analysis: string): string[] => {
+  const findings: string[] = [];
+  const lines = analysis.split('\n');
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if ((trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*')) && 
+        !trimmed.includes('$') && 
+        findings.length < 4) {
+      const cleaned = trimmed.replace(/^[•\-*]\s*/, '').trim();
+      if (cleaned.length > 10 && cleaned.length < 80) {
+        findings.push(cleaned);
+      }
+    }
+  }
+  
+  return findings.length > 0 ? findings : ['Professional inspection completed'];
+};
+
+// Helper to extract total cost from analysis
+const extractTotalCost = (analysis: string): string | null => {
+  const totalMatch = analysis.match(/(?:grand\s*)?total[:\s]+\$[\d,]+(?:\.\d{2})?|\$[\d,]+(?:\.\d{2})?\s*(?:total|grand)/i);
+  if (totalMatch) {
+    const costMatch = totalMatch[0].match(/\$[\d,]+(?:\.\d{2})?/);
+    return costMatch ? costMatch[0] : null;
+  }
+  
+  // Try to find the last dollar amount which is often the total
+  const allCosts = analysis.match(/\$[\d,]+(?:\.\d{2})?/g);
+  if (allCosts && allCosts.length > 0) {
+    return allCosts[allCosts.length - 1];
+  }
+  
+  return null;
+};
+
+// Helper to assess condition from analysis
+const assessCondition = (analysis: string): string => {
+  const lowerAnalysis = analysis.toLowerCase();
+  
+  if (lowerAnalysis.includes('excellent condition') || lowerAnalysis.includes('very good condition')) {
+    return 'Excellent';
+  }
+  if (lowerAnalysis.includes('good condition') || lowerAnalysis.includes('minor')) {
+    return 'Good';
+  }
+  if (lowerAnalysis.includes('fair condition') || lowerAnalysis.includes('moderate')) {
+    return 'Fair';
+  }
+  if (lowerAnalysis.includes('poor') || lowerAnalysis.includes('significant') || lowerAnalysis.includes('extensive')) {
+    return 'Needs Attention';
+  }
+  
+  return 'Fair';
+};
+
+// Info card with refined styling
 const addInfoCard = (
   doc: jsPDF,
   data: [string, string][],
@@ -289,27 +500,30 @@ const addInfoCard = (
   width: number
 ): number => {
   doc.setFillColor(...COLORS.background);
-  const cardHeight = data.length * 8 + 10;
-  drawRoundedRect(doc, margin, yPos, width, cardHeight, 3);
+  const cardHeight = data.length * 7 + 8;
+  drawRoundedRect(doc, margin, yPos, width, cardHeight, 2);
   
-  let innerY = yPos + 8;
+  let innerY = yPos + 6;
   data.forEach(([label, value]) => {
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...COLORS.textMuted);
-    doc.text(label.toUpperCase(), margin + 8, innerY);
-    
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...COLORS.text);
-    doc.text(value || '—', margin + 50, innerY);
+    doc.setTextColor(...COLORS.textMuted);
+    doc.text(label, margin + 5, innerY);
     
-    innerY += 8;
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...COLORS.text);
+    const valueX = margin + 40;
+    const maxWidth = width - 48;
+    const displayValue = value && value.length > maxWidth / 2 ? value.substring(0, Math.floor(maxWidth / 2)) + '...' : (value || '—');
+    doc.text(displayValue, valueX, innerY);
+    
+    innerY += 7;
   });
   
-  return yPos + cardHeight + 8;
+  return yPos + cardHeight + 5;
 };
 
-// Professional footer
+// Professional footer - refined
 const addProfessionalFooter = (
   doc: jsPDF,
   pageWidth: number,
@@ -319,19 +533,19 @@ const addProfessionalFooter = (
   businessName: string,
   jobNumber?: string
 ) => {
-  const footerY = pageHeight - 15;
+  const footerY = pageHeight - 12;
   const margin = 15;
   
-  // Footer line
-  doc.setDrawColor(...COLORS.border);
-  doc.setLineWidth(0.5);
-  doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
+  // Thin divider line
+  doc.setDrawColor(...COLORS.borderLight);
+  doc.setLineWidth(0.2);
+  doc.line(margin, footerY - 4, pageWidth - margin, footerY - 4);
   
-  doc.setFontSize(8);
+  doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(...COLORS.textMuted);
+  doc.setTextColor(...COLORS.textLight);
   
-  // Left: Company name
+  // Left: Generated by
   doc.text(`Generated by ${businessName}`, margin, footerY);
   
   // Center: Page number
@@ -345,7 +559,111 @@ const addProfessionalFooter = (
   }
 };
 
-// Format analysis report with proper sections
+// Cost breakdown table - NEW structured format
+const addCostBreakdown = (
+  doc: jsPDF,
+  analysis: string,
+  yPos: number,
+  margin: number,
+  pageWidth: number,
+  pageHeight: number,
+  branding?: BusinessBranding | null,
+  cachedLogoBase64?: string | null
+): number => {
+  const costLines = extractCostLines(analysis);
+  if (costLines.length === 0) return yPos;
+  
+  // Check for page break
+  if (yPos > pageHeight - 60) {
+    doc.addPage();
+    yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
+  }
+  
+  yPos = addSectionHeader(doc, 'Service Estimate', yPos, margin, pageWidth);
+  yPos += 2;
+  
+  // Build table data
+  const tableData: string[][] = [];
+  let currentOption: string | null = null;
+  
+  for (const line of costLines) {
+    const isOption = /^(option\s+[a-z]|priority\s+\d)/i.test(line.text);
+    const isTotal = /total|subtotal/i.test(line.text);
+    
+    if (isOption) {
+      currentOption = line.text;
+      tableData.push([line.text, '', '']);
+    } else if (isTotal) {
+      tableData.push([line.text.replace(/[:.]?\s*\$.*$/, ''), '', line.cost]);
+    } else {
+      tableData.push([line.text.replace(/[:.]?\s*\$.*$/, ''), '', line.cost]);
+    }
+  }
+  
+  autoTable(doc, {
+    startY: yPos,
+    body: tableData,
+    theme: 'plain',
+    styles: {
+      fontSize: 9,
+      cellPadding: { top: 3, bottom: 3, left: 4, right: 4 },
+      textColor: COLORS.text,
+    },
+    columnStyles: {
+      0: { cellWidth: pageWidth - margin * 2 - 45 },
+      1: { cellWidth: 5 },
+      2: { cellWidth: 35, halign: 'right', fontStyle: 'bold' },
+    },
+    didParseCell: (data) => {
+      const text = data.row.raw?.[0] as string || '';
+      const isOption = /^(option\s+[a-z]|priority\s+\d)/i.test(text);
+      const isTotal = /total|subtotal/i.test(text);
+      
+      if (isOption) {
+        data.cell.styles.fillColor = COLORS.background;
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.textColor = COLORS.primary;
+      } else if (isTotal) {
+        data.cell.styles.fillColor = [245, 243, 238];
+        data.cell.styles.fontStyle = 'bold';
+        if (data.column.index === 2) {
+          data.cell.styles.textColor = COLORS.primary;
+          data.cell.styles.fontSize = 10;
+        }
+      }
+    },
+    margin: { left: margin, right: margin },
+  });
+  
+  return (doc as any).lastAutoTable.finalY + 8;
+};
+
+// Helper to extract cost lines from analysis
+interface CostLine {
+  text: string;
+  cost: string;
+}
+
+const extractCostLines = (analysis: string): CostLine[] => {
+  const lines = analysis.split('\n');
+  const costLines: CostLine[] = [];
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const costMatch = trimmed.match(/\$[\d,]+(?:\.\d{2})?/);
+    
+    if (costMatch) {
+      costLines.push({
+        text: trimmed,
+        cost: costMatch[0],
+      });
+    }
+  }
+  
+  return costLines;
+};
+
+// Format analysis report - improved readability
 const addFormattedAnalysis = (
   doc: jsPDF,
   analysis: string,
@@ -354,110 +672,116 @@ const addFormattedAnalysis = (
   pageWidth: number,
   pageHeight: number,
   branding?: BusinessBranding | null,
-  cachedLogoBase64?: string | null
+  cachedLogoBase64?: string | null,
+  skipCosts: boolean = false
 ): number => {
   let yPos = startY;
-  const maxWidth = pageWidth - margin * 2 - 10;
+  const maxWidth = pageWidth - margin * 2 - 8;
   
-  // Parse analysis into sections
   const lines = analysis.split('\n');
-  let currentSection = '';
   
   for (const line of lines) {
     const trimmedLine = line.trim();
     if (!trimmedLine) {
-      yPos += 3;
+      yPos += 2;
+      continue;
+    }
+    
+    // Skip cost lines if we're showing them in a table
+    if (skipCosts && /\$[\d,]+/.test(trimmedLine)) {
       continue;
     }
     
     // Check for page break
-    if (yPos > pageHeight - 40) {
+    if (yPos > pageHeight - 35) {
       doc.addPage();
       yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
     }
     
-    // Check if this is a section header (starts with ** or ###)
-    const isHeader = trimmedLine.startsWith('**') || trimmedLine.startsWith('###') || trimmedLine.startsWith('##');
+    const isHeader = trimmedLine.startsWith('**') || trimmedLine.startsWith('###') || trimmedLine.startsWith('##') ||
+                     (/^[A-Z][A-Z\s&]+:?$/.test(trimmedLine) && trimmedLine.length > 3);
     const isBullet = trimmedLine.startsWith('-') || trimmedLine.startsWith('•') || trimmedLine.startsWith('*');
     const isNumbered = /^\d+\./.test(trimmedLine);
     
     if (isHeader) {
-      // Clean the header text
-      const headerText = trimmedLine.replace(/[#*]/g, '').trim();
+      const headerText = trimmedLine.replace(/[#*]/g, '').replace(/:$/, '').trim();
       
-      yPos += 4;
+      yPos += 6;
       
-      // Section header with colored background
-      doc.setFillColor(...COLORS.background);
-      doc.rect(margin, yPos - 4, pageWidth - margin * 2, 10, 'F');
-      
-      doc.setFillColor(...COLORS.primary);
-      doc.rect(margin, yPos - 4, 3, 10, 'F');
-      
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(...COLORS.primary);
-      doc.text(headerText, margin + 6, yPos + 2);
-      
-      yPos += 12;
-      currentSection = headerText;
-    } else if (isBullet || isNumbered) {
-      // Bullet or numbered item
-      const bulletText = trimmedLine.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
-      const wrappedLines = doc.splitTextToSize(bulletText, maxWidth - 10);
+      // Section header with accent
+      doc.setFillColor(...COLORS.accent);
+      doc.rect(margin, yPos - 3, 2.5, 6, 'F');
       
       doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...COLORS.primary);
+      doc.text(headerText, margin + 6, yPos + 1);
+      
+      yPos += 10;
+    } else if (isBullet || isNumbered) {
+      const bulletText = trimmedLine.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '');
+      const wrappedLines = doc.splitTextToSize(bulletText, maxWidth - 8);
+      
+      doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...COLORS.text);
       
-      // Draw bullet point
+      // Bullet or number
       if (isBullet) {
-        doc.setFillColor(...COLORS.primary);
-        doc.circle(margin + 5, yPos - 1, 1.5, 'F');
+        doc.setFillColor(...COLORS.accent);
+        doc.circle(margin + 4, yPos - 0.5, 1, 'F');
       } else {
         const num = trimmedLine.match(/^(\d+)\./)?.[1] || '';
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(...COLORS.primary);
+        doc.setTextColor(...COLORS.accent);
         doc.text(num + '.', margin + 2, yPos);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(...COLORS.text);
       }
       
       wrappedLines.forEach((wLine: string, idx: number) => {
-        if (yPos > pageHeight - 30) {
+        if (yPos > pageHeight - 25) {
           doc.addPage();
           yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
         }
-        doc.text(wLine, margin + 12, yPos);
-        yPos += 5;
+        doc.text(wLine, margin + 10, yPos);
+        yPos += 4.5;
       });
       
       yPos += 1;
     } else {
-      // Regular paragraph text
       const wrappedLines = doc.splitTextToSize(trimmedLine, maxWidth);
       
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...COLORS.text);
       
       wrappedLines.forEach((wLine: string) => {
-        if (yPos > pageHeight - 30) {
+        if (yPos > pageHeight - 25) {
           doc.addPage();
           yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
         }
         doc.text(wLine, margin + 2, yPos);
-        yPos += 5;
+        yPos += 4.5;
       });
       
-      yPos += 2;
+      yPos += 1.5;
     }
   }
   
   return yPos;
 };
 
-// Helper to add photos to PDF with annotations
+// Photo labels for guided capture
+const PHOTO_LABELS = [
+  'Overall Front',
+  'Overall Back', 
+  'Detail - Fringe',
+  'Detail - Edge',
+  'Issue Area'
+];
+
+// Photos in 2-up layout with legends below - IMPROVED
 const addPhotosToPDF = async (
   doc: jsPDF,
   photoUrls: string[],
@@ -472,121 +796,124 @@ const addPhotosToPDF = async (
 ): Promise<number> => {
   let yPos = startY;
   
-  // Safely parse annotations
   const annotations: PhotoAnnotations[] = Array.isArray(imageAnnotations) ? imageAnnotations : [];
   
-  yPos = addSectionHeader(doc, 'Inspection Photos', yPos, margin);
-  yPos += 5;
+  yPos = addSectionHeader(doc, 'Inspection Photos', yPos, margin, pageWidth);
+  yPos += 4;
   
-  const photoWidth = 85;
-  const photoHeight = 65;
+  // 2-up layout dimensions
+  const photoWidth = (pageWidth - margin * 2 - 10) / 2;
+  const photoHeight = photoWidth * 0.75; // 4:3 aspect ratio
   const spacing = 10;
   
-  for (let photoIndex = 0; photoIndex < photoUrls.length; photoIndex++) {
-    const url = photoUrls[photoIndex];
-    const photoAnnotation = annotations.find(a => a.photoIndex === photoIndex);
-    const photoMarkers = photoAnnotation?.annotations || [];
+  for (let i = 0; i < photoUrls.length; i += 2) {
+    // Calculate space needed for this row (photos + legends)
+    const maxLegendHeight = 25;
+    const rowHeight = photoHeight + maxLegendHeight + 8;
     
-    // Calculate required space: photo + annotations legend
-    const legendHeight = photoMarkers.length > 0 ? Math.min(photoMarkers.length * 6 + 8, 40) : 0;
-    const totalBlockHeight = photoHeight + legendHeight + 10;
-    
-    if (yPos + totalBlockHeight > pageHeight - 30) {
+    if (yPos + rowHeight > pageHeight - 25) {
       doc.addPage();
       yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
     }
     
-    try {
-      const base64 = await loadImageAsBase64(url, forEmail);
-      if (base64) {
-        // Photo label
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(...COLORS.textMuted);
-        doc.text(`Photo ${photoIndex + 1}`, margin, yPos);
-        yPos += 5;
-        
-        // Photo frame
-        doc.setDrawColor(...COLORS.border);
-        doc.setLineWidth(0.5);
-        doc.rect(margin - 1, yPos - 1, photoWidth + 2, photoHeight + 2);
-        
-        doc.addImage(base64, 'JPEG', margin, yPos, photoWidth, photoHeight);
-        
-        // Draw markers on the photo
-        if (photoMarkers.length > 0) {
-          for (let i = 0; i < photoMarkers.length; i++) {
-            const marker = photoMarkers[i];
-            const markerX = margin + (marker.x / 100) * photoWidth;
-            const markerY = yPos + (marker.y / 100) * photoHeight;
-            
-            // Red marker circle with white border
-            doc.setFillColor(220, 38, 38); // Red
-            doc.circle(markerX, markerY, 3, 'F');
-            doc.setDrawColor(255, 255, 255);
-            doc.setLineWidth(0.8);
-            doc.circle(markerX, markerY, 3, 'S');
-            
-            // Number inside marker
-            doc.setFontSize(6);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(255, 255, 255);
-            doc.text((i + 1).toString(), markerX, markerY + 0.8, { align: 'center' });
-          }
-        }
-        
-        // Annotations legend (next to photo)
-        if (photoMarkers.length > 0) {
-          const legendX = margin + photoWidth + 8;
-          const legendWidth = pageWidth - margin - legendX - 5;
-          let legendY = yPos + 2;
-          
-          doc.setFillColor(...COLORS.background);
-          const legendBoxHeight = Math.min(photoMarkers.length * 8 + 6, photoHeight);
-          drawRoundedRect(doc, legendX, yPos, legendWidth, legendBoxHeight, 2);
-          
+    // Process up to 2 photos per row
+    for (let j = 0; j < 2 && (i + j) < photoUrls.length; j++) {
+      const photoIndex = i + j;
+      const url = photoUrls[photoIndex];
+      const xPos = margin + j * (photoWidth + spacing);
+      
+      const photoAnnotation = annotations.find(a => a.photoIndex === photoIndex);
+      const photoMarkers = photoAnnotation?.annotations || [];
+      
+      try {
+        const base64 = await loadImageAsBase64(url, forEmail);
+        if (base64) {
+          // Photo label
+          const photoLabel = PHOTO_LABELS[photoIndex] || `Photo ${photoIndex + 1}`;
           doc.setFontSize(8);
           doc.setFont('helvetica', 'bold');
-          doc.setTextColor(...COLORS.primary);
-          doc.text('Identified Issues:', legendX + 3, legendY + 4);
-          legendY += 8;
+          doc.setTextColor(...COLORS.textMuted);
+          doc.text(photoLabel, xPos, yPos);
           
-          for (let i = 0; i < photoMarkers.length && legendY < yPos + legendBoxHeight - 4; i++) {
-            const marker = photoMarkers[i];
-            
-            // Marker number badge
-            doc.setFillColor(220, 38, 38);
-            doc.circle(legendX + 5, legendY, 2.5, 'F');
-            doc.setFontSize(6);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(255, 255, 255);
-            doc.text((i + 1).toString(), legendX + 5, legendY + 0.8, { align: 'center' });
-            
-            // Label text
-            doc.setFontSize(8);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(...COLORS.text);
-            const labelText = marker.label.length > 40 ? marker.label.substring(0, 37) + '...' : marker.label;
-            doc.text(labelText, legendX + 10, legendY + 1);
-            
-            legendY += 7;
+          const photoY = yPos + 3;
+          
+          // Photo frame with subtle shadow effect
+          doc.setFillColor(...COLORS.border);
+          doc.rect(xPos + 1, photoY + 1, photoWidth, photoHeight, 'F');
+          
+          // Photo
+          doc.addImage(base64, 'JPEG', xPos, photoY, photoWidth, photoHeight);
+          
+          // Frame border
+          doc.setDrawColor(...COLORS.border);
+          doc.setLineWidth(0.3);
+          doc.rect(xPos, photoY, photoWidth, photoHeight, 'S');
+          
+          // Draw markers on the photo
+          if (photoMarkers.length > 0) {
+            for (let k = 0; k < photoMarkers.length; k++) {
+              const marker = photoMarkers[k];
+              const markerX = xPos + (marker.x / 100) * photoWidth;
+              const markerY = photoY + (marker.y / 100) * photoHeight;
+              
+              // Marker with white outline for visibility
+              doc.setFillColor(...COLORS.danger);
+              doc.circle(markerX, markerY, 2.5, 'F');
+              doc.setDrawColor(...COLORS.white);
+              doc.setLineWidth(0.6);
+              doc.circle(markerX, markerY, 2.5, 'S');
+              
+              // Number
+              doc.setFontSize(6);
+              doc.setFont('helvetica', 'bold');
+              doc.setTextColor(...COLORS.white);
+              doc.text((k + 1).toString(), markerX, markerY + 0.7, { align: 'center' });
+            }
           }
           
-          // Show "and X more..." if truncated
-          if (photoMarkers.length > Math.floor((legendBoxHeight - 14) / 7)) {
-            const remaining = photoMarkers.length - Math.floor((legendBoxHeight - 14) / 7);
+          // Legend below photo
+          if (photoMarkers.length > 0) {
+            let legendY = photoY + photoHeight + 4;
+            
+            doc.setFillColor(...COLORS.background);
+            const legendHeight = Math.min(photoMarkers.length * 4 + 4, 22);
+            drawRoundedRect(doc, xPos, legendY - 2, photoWidth, legendHeight, 2);
+            
             doc.setFontSize(7);
-            doc.setFont('helvetica', 'italic');
-            doc.setTextColor(...COLORS.textMuted);
-            doc.text(`+ ${remaining} more issue${remaining > 1 ? 's' : ''}`, legendX + 5, legendY);
+            
+            const maxItems = 4;
+            for (let k = 0; k < Math.min(photoMarkers.length, maxItems); k++) {
+              const marker = photoMarkers[k];
+              
+              // Number badge
+              doc.setFillColor(...COLORS.danger);
+              doc.circle(xPos + 5, legendY + 1, 2, 'F');
+              doc.setTextColor(...COLORS.white);
+              doc.setFont('helvetica', 'bold');
+              doc.text((k + 1).toString(), xPos + 5, legendY + 1.7, { align: 'center' });
+              
+              // Label
+              doc.setTextColor(...COLORS.text);
+              doc.setFont('helvetica', 'normal');
+              const labelText = marker.label.length > 30 ? marker.label.substring(0, 27) + '...' : marker.label;
+              doc.text(labelText, xPos + 9, legendY + 2);
+              
+              legendY += 4;
+            }
+            
+            if (photoMarkers.length > maxItems) {
+              doc.setFont('helvetica', 'italic');
+              doc.setTextColor(...COLORS.textMuted);
+              doc.text(`+ ${photoMarkers.length - maxItems} more`, xPos + 5, legendY + 1);
+            }
           }
         }
-        
-        yPos += photoHeight + spacing;
+      } catch (error) {
+        console.error('Error adding image to PDF:', error);
       }
-    } catch (error) {
-      console.error('Error adding image to PDF:', error);
     }
+    
+    yPos += photoHeight + 28;
   }
   
   return yPos;
@@ -601,87 +928,94 @@ export const generatePDF = async (
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 15;
   
-  // Add header
   const { yPos: headerEndY, logoBase64: cachedLogoBase64 } = await addProfessionalHeader(doc, pageWidth, branding);
   let yPos = headerEndY;
   
-  // Title section
-  doc.setFontSize(24);
+  // Title - elegant centered
+  doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.text);
   doc.text('Rug Inspection Report', pageWidth / 2, yPos, { align: 'center' });
-  yPos += 10;
+  yPos += 8;
   
-  // Date badge
-  doc.setFillColor(...COLORS.background);
-  const dateText = format(new Date(inspection.created_at), 'MMMM d, yyyy');
-  const dateWidth = doc.getTextWidth(dateText) + 20;
-  drawRoundedRect(doc, (pageWidth - dateWidth) / 2, yPos - 4, dateWidth, 10, 2);
-  
-  doc.setFontSize(10);
+  // Date - subtle
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...COLORS.textMuted);
-  doc.text(dateText, pageWidth / 2, yPos + 2, { align: 'center' });
-  yPos += 18;
+  doc.text(format(new Date(inspection.created_at), 'MMMM d, yyyy'), pageWidth / 2, yPos, { align: 'center' });
+  yPos += 10;
   
-  // Two column layout for info cards
+  // Ornament divider
+  addDivider(doc, yPos, margin, pageWidth, true);
+  yPos += 10;
+  
+  // Executive Summary - NEW
+  if (inspection.analysis_report) {
+    yPos = addExecutiveSummary(doc, inspection, yPos, margin, pageWidth);
+  }
+  
+  // Client and Rug info side by side
   const cardWidth = (pageWidth - margin * 2 - 10) / 2;
   
-  // Client Information
-  yPos = addSectionHeader(doc, 'Client Information', yPos, margin);
+  yPos = addSectionHeader(doc, 'Client Information', yPos, margin, pageWidth);
+  const clientCardY = yPos;
   yPos = addInfoCard(doc, [
     ['Name', inspection.client_name],
     ['Email', inspection.client_email || '—'],
     ['Phone', inspection.client_phone || '—'],
   ], yPos, margin, cardWidth);
   
-  // Rug Details (positioned next to client info on same row)
-  const rugYStart = yPos - (3 * 8 + 10 + 8 + 14);
-  addSectionHeader(doc, 'Rug Details', rugYStart, margin + cardWidth + 10);
+  // Rug details - positioned alongside
+  addSectionHeader(doc, 'Rug Details', clientCardY - 14, margin + cardWidth + 10, pageWidth);
   addInfoCard(doc, [
     ['Rug #', inspection.rug_number],
     ['Type', inspection.rug_type],
     ['Size', inspection.length && inspection.width ? `${inspection.length}' × ${inspection.width}'` : '—'],
-  ], rugYStart + 14, margin + cardWidth + 10, cardWidth);
+  ], clientCardY, margin + cardWidth + 10, cardWidth);
   
   yPos += 5;
   
   // Notes if present
   if (inspection.notes) {
-    yPos = addSectionHeader(doc, 'Notes', yPos, margin);
+    yPos = addSectionHeader(doc, 'Notes', yPos, margin, pageWidth);
     
     doc.setFillColor(...COLORS.background);
-    const noteLines = doc.splitTextToSize(inspection.notes, pageWidth - margin * 2 - 16);
-    const noteHeight = noteLines.length * 5 + 10;
-    drawRoundedRect(doc, margin, yPos, pageWidth - margin * 2, noteHeight, 3);
+    const noteLines = doc.splitTextToSize(inspection.notes, pageWidth - margin * 2 - 12);
+    const noteHeight = noteLines.length * 4.5 + 8;
+    drawRoundedRect(doc, margin, yPos, pageWidth - margin * 2, noteHeight, 2);
     
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...COLORS.text);
     
-    let noteY = yPos + 7;
+    let noteY = yPos + 5;
     noteLines.forEach((line: string) => {
-      doc.text(line, margin + 8, noteY);
-      noteY += 5;
+      doc.text(line, margin + 6, noteY);
+      noteY += 4.5;
     });
     
-    yPos += noteHeight + 10;
+    yPos += noteHeight + 8;
   }
   
-  // Photos
+  // Photos - 2-up layout
   if (inspection.photo_urls && inspection.photo_urls.length > 0) {
     yPos = await addPhotosToPDF(doc, inspection.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, inspection.image_annotations);
   }
   
-  // AI Analysis
+  // Cost breakdown table
   if (inspection.analysis_report) {
-    if (yPos > pageHeight - 80) {
+    yPos = addCostBreakdown(doc, inspection.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+  }
+  
+  // Full analysis
+  if (inspection.analysis_report) {
+    if (yPos > pageHeight - 60) {
       doc.addPage();
       yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
     }
     
-    yPos = addSectionHeader(doc, 'Professional Analysis & Recommendations', yPos, margin);
-    yPos += 5;
+    yPos = addSectionHeader(doc, 'Professional Analysis & Recommendations', yPos, margin, pageWidth);
+    yPos += 3;
     
     yPos = addFormattedAnalysis(
       doc, 
@@ -691,11 +1025,12 @@ export const generatePDF = async (
       pageWidth, 
       pageHeight,
       branding,
-      cachedLogoBase64
+      cachedLogoBase64,
+      true // Skip costs since we showed them in table
     );
   }
   
-  // Add footers to all pages
+  // Add footers
   const totalPages = doc.getNumberOfPages();
   const businessName = branding?.business_name || 'RugBoost';
   
@@ -704,7 +1039,6 @@ export const generatePDF = async (
     addProfessionalFooter(doc, pageWidth, pageHeight, i, totalPages, businessName);
   }
   
-  // Save
   const fileName = `rug-inspection-${inspection.rug_number}-${format(new Date(), 'yyyy-MM-dd')}.pdf`;
   doc.save(fileName);
 };
@@ -725,29 +1059,34 @@ export const generateJobPDF = async (
   const businessName = branding?.business_name || 'RugBoost';
   
   // Title
-  doc.setFontSize(28);
+  doc.setFontSize(22);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.text);
   doc.text('Complete Job Report', pageWidth / 2, yPos, { align: 'center' });
-  yPos += 12;
+  yPos += 8;
   
   // Job number badge
   doc.setFillColor(...COLORS.primary);
   const jobText = `Job #${job.job_number}`;
-  const jobWidth = doc.getTextWidth(jobText) + 24;
-  drawRoundedRect(doc, (pageWidth - jobWidth) / 2, yPos - 5, jobWidth, 12, 3);
+  const jobWidth = doc.getTextWidth(jobText) * 1.5 + 16;
+  drawRoundedRect(doc, (pageWidth - jobWidth) / 2, yPos - 4, jobWidth, 10, 3);
   
-  doc.setFontSize(12);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.white);
-  doc.text(jobText, pageWidth / 2, yPos + 3, { align: 'center' });
-  yPos += 20;
+  doc.text(jobText, pageWidth / 2, yPos + 2, { align: 'center' });
+  yPos += 14;
   
-  // Job and Client info in two columns
+  // Ornament divider
+  addDivider(doc, yPos, margin, pageWidth, true);
+  yPos += 10;
+  
+  // Two-column layout for info cards
   const cardWidth = (pageWidth - margin * 2 - 10) / 2;
   
-  yPos = addSectionHeader(doc, 'Job Information', yPos, margin);
+  yPos = addSectionHeader(doc, 'Job Information', yPos, margin, pageWidth);
   const statusDisplay = job.status.charAt(0).toUpperCase() + job.status.slice(1).replace('-', ' ');
+  const jobCardY = yPos;
   yPos = addInfoCard(doc, [
     ['Status', statusDisplay],
     ['Date', format(new Date(job.created_at), 'MMM d, yyyy')],
@@ -755,19 +1094,18 @@ export const generateJobPDF = async (
     ['Analyzed', rugs.filter(r => r.analysis_report).length.toString()],
   ], yPos, margin, cardWidth);
   
-  const clientYStart = yPos - (4 * 8 + 10 + 8 + 14);
-  addSectionHeader(doc, 'Client Information', clientYStart, margin + cardWidth + 10);
+  addSectionHeader(doc, 'Client Information', jobCardY - 14, margin + cardWidth + 10, pageWidth);
   addInfoCard(doc, [
     ['Name', job.client_name],
     ['Email', job.client_email || '—'],
     ['Phone', job.client_phone || '—'],
-    ['Notes', job.notes ? (job.notes.length > 30 ? job.notes.substring(0, 30) + '...' : job.notes) : '—'],
-  ], clientYStart + 14, margin + cardWidth + 10, cardWidth);
+    ['Notes', job.notes ? (job.notes.length > 25 ? job.notes.substring(0, 22) + '...' : job.notes) : '—'],
+  ], jobCardY, margin + cardWidth + 10, cardWidth);
   
   yPos += 5;
   
   // Rugs summary table
-  yPos = addSectionHeader(doc, 'Rugs Summary', yPos, margin);
+  yPos = addSectionHeader(doc, 'Rugs Summary', yPos, margin, pageWidth);
   
   const rugsSummary = rugs.map((rug, index) => [
     (index + 1).toString(),
@@ -781,21 +1119,23 @@ export const generateJobPDF = async (
     startY: yPos,
     head: [['#', 'Rug Number', 'Type', 'Dimensions', 'Status']],
     body: rugsSummary,
-    theme: 'striped',
+    theme: 'plain',
     styles: { 
-      fontSize: 9,
-      cellPadding: 4,
+      fontSize: 8,
+      cellPadding: 3,
+      textColor: COLORS.text,
     },
     headStyles: { 
       fillColor: COLORS.primary,
       textColor: COLORS.white,
       fontStyle: 'bold',
+      fontSize: 8,
     },
     alternateRowStyles: {
       fillColor: COLORS.background,
     },
     columnStyles: {
-      0: { cellWidth: 15, halign: 'center' },
+      0: { cellWidth: 12, halign: 'center' },
       4: { halign: 'center' },
     },
     margin: { left: margin, right: margin },
@@ -807,7 +1147,7 @@ export const generateJobPDF = async (
     yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
     
     // Rug title with badge
-    doc.setFontSize(20);
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...COLORS.text);
     doc.text(`Rug: ${rug.rug_number}`, margin, yPos);
@@ -815,13 +1155,18 @@ export const generateJobPDF = async (
     // Status badge
     if (rug.analysis_report) {
       doc.setFillColor(...COLORS.success);
-      doc.roundedRect(pageWidth - margin - 25, yPos - 6, 25, 8, 2, 2, 'F');
-      doc.setFontSize(7);
+      doc.roundedRect(pageWidth - margin - 22, yPos - 5, 22, 7, 2, 2, 'F');
+      doc.setFontSize(6);
       doc.setTextColor(...COLORS.white);
-      doc.text('ANALYZED', pageWidth - margin - 12.5, yPos - 1, { align: 'center' });
+      doc.text('ANALYZED', pageWidth - margin - 11, yPos - 0.5, { align: 'center' });
     }
     
-    yPos += 12;
+    yPos += 10;
+    
+    // Executive summary for this rug
+    if (rug.analysis_report) {
+      yPos = addExecutiveSummary(doc, rug, yPos, margin, pageWidth);
+    }
     
     // Rug details card
     yPos = addInfoCard(doc, [
@@ -830,22 +1175,27 @@ export const generateJobPDF = async (
       ['Notes', rug.notes || '—'],
     ], yPos, margin, pageWidth - margin * 2);
     
-    yPos += 5;
+    yPos += 3;
     
-    // Photos
+    // Photos - 2-up layout
     if (rug.photo_urls && rug.photo_urls.length > 0) {
       yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations);
     }
     
+    // Cost breakdown
+    if (rug.analysis_report) {
+      yPos = addCostBreakdown(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+    }
+    
     // Analysis
     if (rug.analysis_report) {
-      if (yPos > pageHeight - 60) {
+      if (yPos > pageHeight - 50) {
         doc.addPage();
         yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
       }
       
-      yPos = addSectionHeader(doc, 'Professional Analysis', yPos, margin);
-      yPos += 5;
+      yPos = addSectionHeader(doc, 'Professional Analysis', yPos, margin, pageWidth);
+      yPos += 3;
       
       yPos = addFormattedAnalysis(
         doc,
@@ -855,7 +1205,8 @@ export const generateJobPDF = async (
         pageWidth,
         pageHeight,
         branding,
-        cachedLogoBase64
+        cachedLogoBase64,
+        true
       );
     }
   }
@@ -867,7 +1218,6 @@ export const generateJobPDF = async (
     addProfessionalFooter(doc, pageWidth, pageHeight, i, totalPages, businessName, job.job_number);
   }
   
-  // Save
   const fileName = `job-report-${job.job_number}-${format(new Date(), 'yyyy-MM-dd')}.pdf`;
   doc.save(fileName);
 };
@@ -889,29 +1239,33 @@ export const generateJobPDFBase64 = async (
   const businessName = branding?.business_name || 'RugBoost';
   
   // Title
-  doc.setFontSize(28);
+  doc.setFontSize(22);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.text);
   doc.text('Complete Job Report', pageWidth / 2, yPos, { align: 'center' });
-  yPos += 12;
+  yPos += 8;
   
   // Job number badge
   doc.setFillColor(...COLORS.primary);
   const jobText = `Job #${job.job_number}`;
-  const jobWidth = doc.getTextWidth(jobText) + 24;
-  drawRoundedRect(doc, (pageWidth - jobWidth) / 2, yPos - 5, jobWidth, 12, 3);
+  const jobWidth = doc.getTextWidth(jobText) * 1.5 + 16;
+  drawRoundedRect(doc, (pageWidth - jobWidth) / 2, yPos - 4, jobWidth, 10, 3);
   
-  doc.setFontSize(12);
+  doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.white);
-  doc.text(jobText, pageWidth / 2, yPos + 3, { align: 'center' });
-  yPos += 20;
+  doc.text(jobText, pageWidth / 2, yPos + 2, { align: 'center' });
+  yPos += 14;
   
-  // Job and Client info
+  addDivider(doc, yPos, margin, pageWidth, true);
+  yPos += 10;
+  
+  // Two-column layout
   const cardWidth = (pageWidth - margin * 2 - 10) / 2;
   
-  yPos = addSectionHeader(doc, 'Job Information', yPos, margin);
+  yPos = addSectionHeader(doc, 'Job Information', yPos, margin, pageWidth);
   const statusDisplay = job.status.charAt(0).toUpperCase() + job.status.slice(1).replace('-', ' ');
+  const jobCardY = yPos;
   yPos = addInfoCard(doc, [
     ['Status', statusDisplay],
     ['Date', format(new Date(job.created_at), 'MMM d, yyyy')],
@@ -919,19 +1273,18 @@ export const generateJobPDFBase64 = async (
     ['Analyzed', rugs.filter(r => r.analysis_report).length.toString()],
   ], yPos, margin, cardWidth);
   
-  const clientYStart = yPos - (4 * 8 + 10 + 8 + 14);
-  addSectionHeader(doc, 'Client Information', clientYStart, margin + cardWidth + 10);
+  addSectionHeader(doc, 'Client Information', jobCardY - 14, margin + cardWidth + 10, pageWidth);
   addInfoCard(doc, [
     ['Name', job.client_name],
     ['Email', job.client_email || '—'],
     ['Phone', job.client_phone || '—'],
-    ['Notes', job.notes ? (job.notes.length > 30 ? job.notes.substring(0, 30) + '...' : job.notes) : '—'],
-  ], clientYStart + 14, margin + cardWidth + 10, cardWidth);
+    ['Notes', job.notes ? (job.notes.length > 25 ? job.notes.substring(0, 22) + '...' : job.notes) : '—'],
+  ], jobCardY, margin + cardWidth + 10, cardWidth);
   
   yPos += 5;
   
   // Rugs summary
-  yPos = addSectionHeader(doc, 'Rugs Summary', yPos, margin);
+  yPos = addSectionHeader(doc, 'Rugs Summary', yPos, margin, pageWidth);
   
   const rugsSummary = rugs.map((rug, index) => [
     (index + 1).toString(),
@@ -945,11 +1298,11 @@ export const generateJobPDFBase64 = async (
     startY: yPos,
     head: [['#', 'Rug Number', 'Type', 'Dimensions', 'Status']],
     body: rugsSummary,
-    theme: 'striped',
-    styles: { fontSize: 9, cellPadding: 4 },
-    headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: 'bold' },
+    theme: 'plain',
+    styles: { fontSize: 8, cellPadding: 3, textColor: COLORS.text },
+    headStyles: { fillColor: COLORS.primary, textColor: COLORS.white, fontStyle: 'bold', fontSize: 8 },
     alternateRowStyles: { fillColor: COLORS.background },
-    columnStyles: { 0: { cellWidth: 15, halign: 'center' }, 4: { halign: 'center' } },
+    columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 4: { halign: 'center' } },
     margin: { left: margin, right: margin },
   });
   
@@ -958,20 +1311,24 @@ export const generateJobPDFBase64 = async (
     doc.addPage();
     yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
     
-    doc.setFontSize(20);
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...COLORS.text);
     doc.text(`Rug: ${rug.rug_number}`, margin, yPos);
     
     if (rug.analysis_report) {
       doc.setFillColor(...COLORS.success);
-      doc.roundedRect(pageWidth - margin - 25, yPos - 6, 25, 8, 2, 2, 'F');
-      doc.setFontSize(7);
+      doc.roundedRect(pageWidth - margin - 22, yPos - 5, 22, 7, 2, 2, 'F');
+      doc.setFontSize(6);
       doc.setTextColor(...COLORS.white);
-      doc.text('ANALYZED', pageWidth - margin - 12.5, yPos - 1, { align: 'center' });
+      doc.text('ANALYZED', pageWidth - margin - 11, yPos - 0.5, { align: 'center' });
     }
     
-    yPos += 12;
+    yPos += 10;
+    
+    if (rug.analysis_report) {
+      yPos = addExecutiveSummary(doc, rug, yPos, margin, pageWidth);
+    }
     
     yPos = addInfoCard(doc, [
       ['Type', rug.rug_type],
@@ -979,22 +1336,26 @@ export const generateJobPDFBase64 = async (
       ['Notes', rug.notes || '—'],
     ], yPos, margin, pageWidth - margin * 2);
     
-    yPos += 5;
+    yPos += 3;
     
     if (rug.photo_urls && rug.photo_urls.length > 0) {
       yPos = await addPhotosToPDF(doc, rug.photo_urls, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, rug.image_annotations, true);
     }
     
     if (rug.analysis_report) {
-      if (yPos > pageHeight - 60) {
+      yPos = addCostBreakdown(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+    }
+    
+    if (rug.analysis_report) {
+      if (yPos > pageHeight - 50) {
         doc.addPage();
         yPos = addProfessionalHeaderSync(doc, pageWidth, branding, cachedLogoBase64);
       }
       
-      yPos = addSectionHeader(doc, 'Professional Analysis', yPos, margin);
-      yPos += 5;
+      yPos = addSectionHeader(doc, 'Professional Analysis', yPos, margin, pageWidth);
+      yPos += 3;
       
-      yPos = addFormattedAnalysis(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64);
+      yPos = addFormattedAnalysis(doc, rug.analysis_report, yPos, margin, pageWidth, pageHeight, branding, cachedLogoBase64, true);
     }
   }
   
@@ -1005,8 +1366,5 @@ export const generateJobPDFBase64 = async (
     addProfessionalFooter(doc, pageWidth, pageHeight, i, totalPages, businessName, job.job_number);
   }
   
-  // Return as base64
-  const pdfOutput = doc.output('datauristring');
-  const base64 = pdfOutput.split(',')[1];
-  return base64;
+  return doc.output('datauristring').split(',')[1];
 };
