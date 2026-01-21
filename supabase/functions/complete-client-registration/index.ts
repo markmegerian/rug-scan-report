@@ -11,6 +11,38 @@ interface RegistrationRequest {
   password: string;
 }
 
+// Rate limiting: 5 registration attempts per IP per 5 minutes
+const rateLimits = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const RATE_LIMIT_MAX_REQUESTS = 5;
+
+function cleanupRateLimits(): void {
+  const now = Date.now();
+  for (const [key, value] of rateLimits.entries()) {
+    if (now > value.resetAt) {
+      rateLimits.delete(key);
+    }
+  }
+}
+
+function checkRateLimit(identifier: string): { allowed: boolean; remaining: number; resetIn: number } {
+  cleanupRateLimits();
+  const now = Date.now();
+  const limit = rateLimits.get(identifier);
+
+  if (!limit || now > limit.resetAt) {
+    rateLimits.set(identifier, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - 1, resetIn: RATE_LIMIT_WINDOW_MS };
+  }
+
+  if (limit.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return { allowed: false, remaining: 0, resetIn: limit.resetAt - now };
+  }
+
+  limit.count++;
+  return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - limit.count, resetIn: limit.resetAt - now };
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -18,6 +50,27 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Get client identifier from IP or forwarded header
+    const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 
+                     req.headers.get('x-real-ip') || 
+                     'unknown';
+    
+    // Check rate limit
+    const rateCheck = checkRateLimit(`registration:${clientIp}`);
+    if (!rateCheck.allowed) {
+      console.log(`Rate limit exceeded for IP: ${clientIp}`);
+      return new Response(
+        JSON.stringify({ error: 'Too many registration attempts. Please try again later.' }),
+        { 
+          status: 429, 
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json',
+            'Retry-After': Math.ceil(rateCheck.resetIn / 1000).toString(),
+          } 
+        }
+      );
+    }
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
