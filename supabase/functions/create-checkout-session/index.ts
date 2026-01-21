@@ -125,16 +125,22 @@ serve(async (req) => {
       throw new Error("Missing required fields: jobId, clientJobAccessId, selectedServices, totalAmount");
     }
 
+    // Use service role client for authorization checks (bypasses RLS for server-side validation)
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+
     // SECURITY: Verify the authenticated user has access to this job
     // Get user's client account
-    const { data: clientAccount, error: clientError } = await supabaseClient
+    const { data: clientAccount, error: clientError } = await supabaseAdmin
       .from('client_accounts')
       .select('id')
       .eq('user_id', userId)
       .single();
 
     if (clientError || !clientAccount) {
-      console.error("Client account not found for user:", userId);
+      console.error("Client account not found for user:", userId, "Error:", clientError);
       return new Response(
         JSON.stringify({ error: "Client account not found" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -142,7 +148,7 @@ serve(async (req) => {
     }
 
     // Verify the client has access to this specific job via client_job_access
-    const { data: accessRecord, error: accessError } = await supabaseClient
+    const { data: accessRecord, error: accessError } = await supabaseAdmin
       .from('client_job_access')
       .select('id, job_id')
       .eq('id', clientJobAccessId)
@@ -215,25 +221,8 @@ serve(async (req) => {
       },
     });
 
-    // Create a pending payment record using service role client
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
-
-    // Get client account ID if user is authenticated
-    let clientId: string | null = null;
-    if (userId) {
-      const { data: clientAccount } = await supabaseAdmin
-        .from("client_accounts")
-        .select("id")
-        .eq("user_id", userId)
-        .single();
-      
-      if (clientAccount) {
-        clientId = clientAccount.id;
-      }
-    }
+    // Get client account ID for payment record (already have clientAccount from auth check above)
+    const clientId = clientAccount?.id || null;
 
     // Check for existing pending payment for this job and delete it
     await supabaseAdmin
