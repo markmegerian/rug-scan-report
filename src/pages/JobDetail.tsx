@@ -27,6 +27,8 @@ import EstimateReview from '@/components/EstimateReview';
 import AnalysisProgress, { AnalysisStage } from '@/components/AnalysisProgress';
 import { ModelComparisonDialog } from '@/components/ModelComparisonDialog';
 import ClientPortalStatus from '@/components/ClientPortalStatus';
+import WorkOrderCard from '@/components/WorkOrderCard';
+import PaymentTracking from '@/components/PaymentTracking';
 
 interface ClientPortalStatusData {
   accessToken: string;
@@ -48,6 +50,8 @@ interface Job {
   notes: string | null;
   status: string;
   created_at: string;
+  client_approved_at?: string | null;
+  payment_status?: string;
 }
 
 interface Rug {
@@ -69,6 +73,18 @@ interface ApprovedEstimate {
   inspection_id: string;
   services: any[];
   total_amount: number;
+}
+
+interface Payment {
+  id: string;
+  status: string;
+  amount: number;
+  currency: string;
+  created_at: string;
+  paid_at: string | null;
+  stripe_payment_intent_id: string | null;
+  stripe_checkout_session_id: string | null;
+  metadata: any;
 }
 
 const STATUS_OPTIONS = [
@@ -113,6 +129,7 @@ const JobDetail = () => {
   const [clientPortalStatus, setClientPortalStatus] = useState<ClientPortalStatusData | null>(null);
   const [generatingPortalLink, setGeneratingPortalLink] = useState(false);
   const [resendingInvite, setResendingInvite] = useState(false);
+  const [payments, setPayments] = useState<Payment[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -127,6 +144,7 @@ const JobDetail = () => {
       fetchServicePrices();
       fetchApprovedEstimates();
       fetchClientPortalLink();
+      fetchPayments();
     }
   }, [user, jobId]);
 
@@ -200,6 +218,22 @@ const JobDetail = () => {
       setApprovedEstimates(estimates);
     } catch (error) {
       console.error('Error fetching approved estimates:', error);
+    }
+  };
+
+  const fetchPayments = async () => {
+    if (!jobId) return;
+    try {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('job_id', jobId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPayments(data || []);
+    } catch (error) {
+      console.error('Error fetching payments:', error);
     }
   };
 
@@ -1209,6 +1243,39 @@ const JobDetail = () => {
             onResendInvite={handleResendInvite}
             isResending={resendingInvite}
           />
+        )}
+
+        {/* Work Order & Payment Tracking - Show when there are approved estimates */}
+        {approvedEstimates.length > 0 && (
+          <div className="grid lg:grid-cols-2 gap-6">
+            {/* Work Order Card */}
+            <WorkOrderCard
+              rugs={approvedEstimates.map(ae => {
+                const rug = rugs.find(r => r.id === ae.inspection_id);
+                return {
+                  rugNumber: rug?.rug_number || 'Unknown',
+                  rugType: rug?.rug_type || 'Unknown',
+                  dimensions: rug?.length && rug?.width 
+                    ? `${rug.length}' × ${rug.width}'` 
+                    : 'N/A',
+                  services: ae.services,
+                  total: ae.total_amount,
+                };
+              })}
+              payment={(() => {
+                const p = payments.find(p => p.status === 'completed');
+                return p ? { id: p.id, status: p.status, amount: p.amount, paidAt: p.paid_at } : null;
+              })()}
+              clientApprovedAt={job.client_approved_at || null}
+            />
+
+            {/* Payment Tracking */}
+            <PaymentTracking
+              payments={payments}
+              jobNumber={job.job_number}
+              clientName={job.client_name}
+            />
+          </div>
         )}
 
         {/* Rugs Section */}

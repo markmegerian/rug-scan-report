@@ -364,8 +364,13 @@ const ClientPortal = () => {
 
     setIsProcessingPayment(true);
     try {
-      // Prepare selected services data
-      const servicesForCheckout: { rugNumber: string; services: ServiceItem[] }[] = [];
+      // Prepare selected services data per rug with estimate ID
+      const servicesForCheckout: { 
+        rugNumber: string; 
+        rugId: string;
+        estimateId: string;
+        services: ServiceItem[] 
+      }[] = [];
       
       rugs.forEach(rug => {
         const selectedIds = selectedServices.get(rug.id) || new Set();
@@ -373,12 +378,50 @@ const ClientPortal = () => {
         if (rugSelectedServices.length > 0) {
           servicesForCheckout.push({
             rugNumber: rug.rug_number,
+            rugId: rug.id,
+            estimateId: rug.estimate_id,
             services: rugSelectedServices,
           });
         }
       });
 
       const total = calculateSelectedTotal();
+
+      // Save client service selections to database before checkout
+      for (const rugSelection of servicesForCheckout) {
+        const selectionTotal = rugSelection.services.reduce(
+          (sum, s) => sum + (s.quantity * s.unitPrice), 0
+        );
+        
+        // First try to find existing selection
+        const { data: existingSelection } = await supabase
+          .from('client_service_selections')
+          .select('id')
+          .eq('client_job_access_id', clientJobAccessId!)
+          .eq('approved_estimate_id', rugSelection.estimateId)
+          .maybeSingle();
+        
+        if (existingSelection) {
+          // Update existing
+          await supabase
+            .from('client_service_selections')
+            .update({
+              selected_services: rugSelection.services as unknown as any,
+              total_selected: selectionTotal,
+            })
+            .eq('id', existingSelection.id);
+        } else {
+          // Insert new
+          await supabase
+            .from('client_service_selections')
+            .insert({
+              client_job_access_id: clientJobAccessId!,
+              approved_estimate_id: rugSelection.estimateId,
+              selected_services: rugSelection.services as unknown as any,
+              total_selected: selectionTotal,
+            });
+        }
+      }
 
       // Call edge function to create Stripe checkout session
       const { data, error } = await supabase.functions.invoke('create-checkout-session', {
