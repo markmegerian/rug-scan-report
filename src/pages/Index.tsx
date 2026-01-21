@@ -6,17 +6,28 @@ import rugboostLogo from '@/assets/rugboost-logo.svg';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isClient, isStaff, isAdmin } = useAuth();
 
   useEffect(() => {
     if (!authLoading) {
       if (user) {
-        navigate('/dashboard');
+        // Route based on user role
+        if (isAdmin) {
+          navigate('/admin');
+        } else if (isStaff) {
+          navigate('/dashboard');
+        } else if (isClient) {
+          navigate('/client/dashboard');
+        } else {
+          // User has no roles yet - might be new staff signup
+          // Default to dashboard (they'll set up their account there)
+          navigate('/dashboard');
+        }
       } else {
         navigate('/auth');
       }
     }
-  }, [user, authLoading, navigate]);
+  }, [user, authLoading, isClient, isStaff, isAdmin, navigate]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">

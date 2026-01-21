@@ -119,10 +119,10 @@ const PaymentSuccess = () => {
               <Button
                 variant="outline"
                 className="flex-1"
-                onClick={() => navigate('/')}
+                onClick={() => navigate('/client/dashboard')}
               >
                 <Home className="h-4 w-4 mr-2" />
-                Go Home
+                Go to Dashboard
               </Button>
             </div>
 

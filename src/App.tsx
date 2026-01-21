@@ -21,6 +21,7 @@ const AccountsReceivable = lazy(() => import("./pages/AccountsReceivable"));
 // Client Portal Pages
 const ClientAuth = lazy(() => import("./pages/ClientAuth"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
+const ClientDashboard = lazy(() => import("./pages/ClientDashboard"));
 const ClientHistory = lazy(() => import("./pages/ClientHistory"));
 const ClientSetPassword = lazy(() => import("./pages/ClientSetPassword"));
 const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
@@ -63,6 +64,7 @@ const App = () => (
               
               {/* Client Portal Routes */}
               <Route path="/client/auth" element={<ClientAuth />} />
+              <Route path="/client/dashboard" element={<ClientDashboard />} />
               <Route path="/client/history" element={<ClientHistory />} />
               <Route path="/client/set-password" element={<ClientSetPassword />} />
               <Route path="/client/payment-success" element={<PaymentSuccess />} />
