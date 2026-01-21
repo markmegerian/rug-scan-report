@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuditLog } from '@/hooks/useAuditLog';
 
 interface PayoutDialogProps {
   open: boolean;
@@ -31,6 +32,7 @@ export const PayoutDialog = ({
   onSuccess,
 }: PayoutDialogProps) => {
   const { user } = useAuth();
+  const { logAction } = useAuditLog();
   const [loading, setLoading] = useState(false);
   const [feePercentage, setFeePercentage] = useState(10);
   const [amount, setAmount] = useState(maxAmount.toString());
@@ -103,6 +105,19 @@ export const PayoutDialog = ({
       if (payout) {
         await supabase.functions.invoke('notify-payout', {
           body: { payout_id: payout.id, notification_type: 'created' }
+        });
+        
+        // Log the action
+        logAction({
+          action: 'payout_created',
+          entity_type: 'payout',
+          entity_id: payout.id,
+          details: { 
+            business: businessName, 
+            amount: parsedAmount,
+            gross_revenue: grossRevenue,
+            platform_fee: platformFee,
+          },
         });
       }
 

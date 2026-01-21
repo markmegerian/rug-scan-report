@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Search, DollarSign, Loader2, CheckCircle, Clock, XCircle, Percent } from 'lucide-react';
+import { Search, DollarSign, Loader2, CheckCircle, Clock, XCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { PlatformFeeSettings } from '@/components/admin/PlatformFeeSettings';
+import { useAuditLog } from '@/hooks/useAuditLog';
 import { toast } from 'sonner';
 
 interface Payout {
@@ -48,6 +49,7 @@ const AdminPayouts = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const { logAction } = useAuditLog();
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -115,6 +117,14 @@ const AdminPayouts = () => {
       if (error) throw error;
       toast.success('Payout marked as completed');
       
+      // Log the action
+      logAction({
+        action: 'payout_completed',
+        entity_type: 'payout',
+        entity_id: payoutId,
+        details: { status: 'completed' },
+      });
+      
       // Send notification email
       sendPayoutNotification(payoutId, 'completed');
       
@@ -134,6 +144,15 @@ const AdminPayouts = () => {
 
       if (error) throw error;
       toast.success('Payout marked as failed');
+      
+      // Log the action
+      logAction({
+        action: 'payout_failed',
+        entity_type: 'payout',
+        entity_id: payoutId,
+        details: { status: 'failed' },
+      });
+      
       fetchPayouts();
     } catch (error) {
       console.error('Error updating payout:', error);

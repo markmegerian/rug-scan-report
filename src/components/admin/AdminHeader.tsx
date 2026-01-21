@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Settings, LayoutDashboard, Shield } from 'lucide-react';
+import { LogOut, Settings, LayoutDashboard, Shield, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import rugboostLogo from '@/assets/rugboost-logo.svg';
@@ -41,6 +41,9 @@ export const AdminHeader = ({ title = 'Platform Admin', subtitle = 'Manage busin
           </Button>
           <Button onClick={() => navigate('/admin/payouts')} variant="outline" size="sm" className="gap-2">
             Payouts
+          </Button>
+          <Button onClick={() => navigate('/admin/audit-log')} variant="ghost" size="icon" title="Audit Log">
+            <History className="h-4 w-4" />
           </Button>
           <Button onClick={() => navigate('/admin/settings')} variant="ghost" size="icon" title="Platform Settings">
             <Settings className="h-4 w-4" />
