@@ -26,6 +26,18 @@ import EmailPreviewDialog from '@/components/EmailPreviewDialog';
 import EstimateReview from '@/components/EstimateReview';
 import AnalysisProgress, { AnalysisStage } from '@/components/AnalysisProgress';
 import { ModelComparisonDialog } from '@/components/ModelComparisonDialog';
+import ClientPortalStatus from '@/components/ClientPortalStatus';
+
+interface ClientPortalStatusData {
+  accessToken: string;
+  emailSentAt: string | null;
+  emailError: string | null;
+  firstAccessedAt: string | null;
+  passwordSetAt: string | null;
+  hasClientAccount: boolean;
+  hasServiceSelections: boolean;
+  serviceSelectionsAt: string | null;
+}
 
 interface Job {
   id: string;
@@ -98,7 +110,9 @@ const JobDetail = () => {
   const [showCompareDialog, setShowCompareDialog] = useState(false);
   const [approvedEstimates, setApprovedEstimates] = useState<ApprovedEstimate[]>([]);
   const [clientPortalLink, setClientPortalLink] = useState<string | null>(null);
+  const [clientPortalStatus, setClientPortalStatus] = useState<ClientPortalStatusData | null>(null);
   const [generatingPortalLink, setGeneratingPortalLink] = useState(false);
+  const [resendingInvite, setResendingInvite] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -194,16 +208,82 @@ const JobDetail = () => {
     try {
       const { data, error } = await supabase
         .from('client_job_access')
-        .select('access_token')
+        .select(`
+          id,
+          access_token,
+          email_sent_at,
+          email_error,
+          first_accessed_at,
+          password_set_at,
+          client_id
+        `)
         .eq('job_id', jobId)
         .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
       if (data) {
         setClientPortalLink(`${window.location.origin}/client/${data.access_token}`);
+        
+        // Check if there are service selections for this access
+        let hasSelections = false;
+        let selectionsAt = null;
+        
+        const { data: selections } = await supabase
+          .from('client_service_selections')
+          .select('id, created_at')
+          .eq('client_job_access_id', data.id)
+          .maybeSingle();
+        
+        if (selections) {
+          hasSelections = true;
+          selectionsAt = selections.created_at;
+        }
+
+        setClientPortalStatus({
+          accessToken: data.access_token,
+          emailSentAt: data.email_sent_at,
+          emailError: data.email_error,
+          firstAccessedAt: data.first_accessed_at,
+          passwordSetAt: data.password_set_at,
+          hasClientAccount: !!data.client_id,
+          hasServiceSelections: hasSelections,
+          serviceSelectionsAt: selectionsAt,
+        });
       }
     } catch (error) {
       console.error('Error fetching client portal link:', error);
+    }
+  };
+
+  const handleResendInvite = async () => {
+    if (!job || !clientPortalStatus) return;
+    
+    setResendingInvite(true);
+    try {
+      const portalUrl = `${window.location.origin}/client/${clientPortalStatus.accessToken}`;
+      
+      const { error: inviteError } = await supabase.functions.invoke('invite-client', {
+        body: {
+          email: job.client_email,
+          fullName: job.client_name,
+          jobId: jobId,
+          accessToken: clientPortalStatus.accessToken,
+          jobNumber: job.job_number,
+          portalUrl: portalUrl,
+        },
+      });
+
+      if (inviteError) throw inviteError;
+      
+      toast.success('Invitation email resent successfully!');
+      
+      // Refresh the portal status
+      await fetchClientPortalLink();
+    } catch (error) {
+      console.error('Error resending invite:', error);
+      toast.error('Failed to resend invitation');
+    } finally {
+      setResendingInvite(false);
     }
   };
 
@@ -279,6 +359,9 @@ const JobDetail = () => {
       
       // Copy to clipboard
       await navigator.clipboard.writeText(link);
+      
+      // Refresh the portal status to get the new tracking data
+      await fetchClientPortalLink();
       
       if (inviteData?.isNewUser) {
         toast.success('Client portal link generated! Client will be prompted to set their password on first visit.');
@@ -1111,6 +1194,22 @@ const JobDetail = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Client Portal Status Section */}
+        {clientPortalLink && clientPortalStatus && (
+          <ClientPortalStatus
+            portalLink={clientPortalLink}
+            emailSentAt={clientPortalStatus.emailSentAt}
+            emailError={clientPortalStatus.emailError}
+            firstAccessedAt={clientPortalStatus.firstAccessedAt}
+            passwordSetAt={clientPortalStatus.passwordSetAt}
+            hasClientAccount={clientPortalStatus.hasClientAccount}
+            hasServiceSelections={clientPortalStatus.hasServiceSelections}
+            serviceSelectionsAt={clientPortalStatus.serviceSelectionsAt}
+            onResendInvite={handleResendInvite}
+            isResending={resendingInvite}
+          />
+        )}
 
         {/* Rugs Section */}
         <Card>

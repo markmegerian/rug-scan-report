@@ -172,6 +172,10 @@ Deno.serve(async (req) => {
       console.log('Linked client to job access');
     }
 
+    // Variable to track email status
+    let emailSentSuccessfully = false;
+    let emailErrorMessage: string | null = null;
+
     // Get job owner's profile for branding
     const { data: job } = await supabaseAdmin
       .from('jobs')
@@ -299,14 +303,31 @@ ${businessName}`;
 
         if (emailError) {
           console.error('Error sending invite email:', emailError);
+          emailErrorMessage = typeof emailError === 'object' ? JSON.stringify(emailError) : String(emailError);
         } else {
           console.log('Invite email sent successfully');
+          emailSentSuccessfully = true;
         }
       } catch (emailErr) {
         console.error('Failed to send invite email:', emailErr);
+        emailErrorMessage = emailErr instanceof Error ? emailErr.message : String(emailErr);
       }
     } else {
       console.log('Skipping email - no RESEND_API_KEY or portalUrl');
+      emailErrorMessage = 'Email not configured (missing RESEND_API_KEY or portalUrl)';
+    }
+
+    // Update client_job_access with email status
+    const { error: updateError } = await supabaseAdmin
+      .from('client_job_access')
+      .update({
+        email_sent_at: emailSentSuccessfully ? new Date().toISOString() : null,
+        email_error: emailErrorMessage,
+      })
+      .eq('access_token', accessToken);
+
+    if (updateError) {
+      console.error('Error updating email status:', updateError);
     }
 
     return new Response(
