@@ -187,6 +187,11 @@ const AccountSettings = () => {
   };
 
   const handlePasswordChange = async () => {
+    if (!passwordData.currentPassword) {
+      toast.error("Please enter your current password");
+      return;
+    }
+
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast.error("New passwords do not match");
       return;
@@ -199,6 +204,17 @@ const AccountSettings = () => {
 
     setChangingPassword(true);
     try {
+      // Verify current password before allowing change
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user!.email!,
+        password: passwordData.currentPassword,
+      });
+
+      if (verifyError) {
+        toast.error("Current password is incorrect");
+        return;
+      }
+
       const { error } = await supabase.auth.updateUser({
         password: passwordData.newPassword,
       });
@@ -310,6 +326,32 @@ const AccountSettings = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
+                <Label htmlFor="currentPassword">Current Password</Label>
+                <div className="relative">
+                  <Input
+                    id="currentPassword"
+                    name="currentPassword"
+                    type={showCurrentPassword ? "text" : "password"}
+                    value={passwordData.currentPassword}
+                    onChange={handlePasswordInputChange}
+                    placeholder="Enter current password"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  >
+                    {showCurrentPassword ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="newPassword">New Password</Label>
                 <div className="relative">
                   <Input
@@ -348,7 +390,7 @@ const AccountSettings = () => {
               </div>
               <Button
                 onClick={handlePasswordChange}
-                disabled={changingPassword || !passwordData.newPassword || !passwordData.confirmPassword}
+                disabled={changingPassword || !passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword}
                 variant="outline"
               >
                 {changingPassword ? (
