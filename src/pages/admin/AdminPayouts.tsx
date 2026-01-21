@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Search, DollarSign, Loader2, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Search, DollarSign, Loader2, CheckCircle, Clock, XCircle, Percent } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { AdminHeader } from '@/components/admin/AdminHeader';
+import { PlatformFeeSettings } from '@/components/admin/PlatformFeeSettings';
 import { toast } from 'sonner';
 
 interface Payout {
@@ -89,6 +90,21 @@ const AdminPayouts = () => {
     }
   };
 
+  const sendPayoutNotification = async (payoutId: string, type: 'created' | 'completed') => {
+    try {
+      const { error } = await supabase.functions.invoke('notify-payout', {
+        body: { payout_id: payoutId, notification_type: type }
+      });
+      if (error) {
+        console.error('Error sending notification:', error);
+      } else {
+        console.log(`Payout ${type} notification sent`);
+      }
+    } catch (err) {
+      console.error('Error invoking notify-payout:', err);
+    }
+  };
+
   const handleMarkCompleted = async (payoutId: string) => {
     try {
       const { error } = await supabase
@@ -98,6 +114,10 @@ const AdminPayouts = () => {
 
       if (error) throw error;
       toast.success('Payout marked as completed');
+      
+      // Send notification email
+      sendPayoutNotification(payoutId, 'completed');
+      
       fetchPayouts();
     } catch (error) {
       console.error('Error updating payout:', error);
@@ -154,6 +174,8 @@ const AdminPayouts = () => {
 
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-6">
+          {/* Platform Fee Settings */}
+          <PlatformFeeSettings />
           {/* Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Card className="shadow-card">

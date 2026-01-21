@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, DollarSign, Briefcase, TrendingUp, Clock, CheckCircle, Loader2 } from 'lucide-react';
+import { Users, DollarSign, Briefcase, TrendingUp, Clock, CheckCircle, Loader2, Percent } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
@@ -14,6 +14,8 @@ interface DashboardMetrics {
   totalBusinesses: number;
   totalJobs: number;
   totalRevenue: number;
+  platformFees: number;
+  platformFeePercentage: number;
   pendingPayouts: number;
   completedPayouts: number;
 }
@@ -49,6 +51,8 @@ const AdminDashboard = () => {
     totalBusinesses: 0,
     totalJobs: 0,
     totalRevenue: 0,
+    platformFees: 0,
+    platformFeePercentage: 10,
     pendingPayouts: 0,
     completedPayouts: 0,
   });
@@ -92,11 +96,21 @@ const AdminDashboard = () => {
       // Fetch all payouts
       const { data: payouts, error: payoutsError } = await supabase
         .from('payouts')
-        .select('id, amount, status');
+        .select('id, amount, status, platform_fees_deducted');
       if (payoutsError) throw payoutsError;
+
+      // Fetch platform fee percentage
+      const { data: feeSettings } = await supabase
+        .from('platform_settings')
+        .select('setting_value')
+        .eq('setting_key', 'platform_fee_percentage')
+        .single();
+      
+      const feePercentage = feeSettings ? parseFloat(feeSettings.setting_value) : 10;
 
       // Calculate metrics
       const totalRevenue = payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
+      const platformFees = totalRevenue * (feePercentage / 100);
       const pendingPayouts = payouts?.filter(p => p.status === 'pending').reduce((sum, p) => sum + Number(p.amount), 0) || 0;
       const completedPayouts = payouts?.filter(p => p.status === 'completed').reduce((sum, p) => sum + Number(p.amount), 0) || 0;
 
@@ -104,6 +118,8 @@ const AdminDashboard = () => {
         totalBusinesses: profiles?.length || 0,
         totalJobs: jobs?.length || 0,
         totalRevenue,
+        platformFees,
+        platformFeePercentage: feePercentage,
         pendingPayouts,
         completedPayouts,
       });
@@ -159,7 +175,8 @@ const AdminDashboard = () => {
     );
   }
 
-  const outstandingBalance = metrics.totalRevenue - metrics.completedPayouts;
+  const netPayableToBusiness = metrics.totalRevenue - metrics.platformFees;
+  const outstandingBalance = netPayableToBusiness - metrics.completedPayouts;
 
   return (
     <div className="min-h-screen bg-background">
@@ -167,8 +184,8 @@ const AdminDashboard = () => {
 
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-6">
-          {/* Metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Platform Revenue Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <AdminMetricCard
               title="Total Businesses"
               value={metrics.totalBusinesses}
@@ -182,16 +199,23 @@ const AdminDashboard = () => {
               description="All time"
             />
             <AdminMetricCard
-              title="Total Revenue"
+              title="Gross Revenue"
               value={formatCurrency(metrics.totalRevenue)}
               icon={DollarSign}
-              description="Completed payments"
+              description="Total collected"
             />
             <AdminMetricCard
-              title="Outstanding Balance"
+              title="Platform Fees"
+              value={formatCurrency(metrics.platformFees)}
+              icon={Percent}
+              description={`${metrics.platformFeePercentage}% of revenue`}
+              className="border-2 border-primary/20"
+            />
+            <AdminMetricCard
+              title="Due to Businesses"
               value={formatCurrency(outstandingBalance)}
               icon={TrendingUp}
-              description="Due to businesses"
+              description="Net after fees & payouts"
             />
           </div>
 
