@@ -233,12 +233,9 @@ Subtotal: $[total]
 
 4. TOTAL ESTIMATE: State the total for all services clearly with an actual dollar amount.
 
-5. ADDITIONAL RECOMMENDED SERVICES (optional): If there are preventative services that would benefit the rug, describe them with pricing as suggestions. Always include actual prices.
+5. NEXT STEPS: Explain the assessment basis, offer to discuss priorities or budget, and provide timeline estimate. Include contact information: ${businessPhone ? `Please contact us at ${businessPhone}` : 'Please contact us'} to discuss these recommendations.
 
-6. NEXT STEPS: Explain the assessment basis, offer to discuss priorities or budget, and provide timeline estimate. Include contact information: ${businessPhone ? `Please contact us at ${businessPhone}` : 'Please contact us'} to discuss these recommendations.
-
-7. CLOSING: Sign off with "Sincerely," followed by "${businessName}"${businessAddress ? ` at ${businessAddress}` : ''}.
-
+6. CLOSING: Sign off with "Sincerely," followed by "${businessName}"${businessAddress ? ` at ${businessAddress}` : ''}.
 IMAGE ANNOTATIONS (for the "imageAnnotations" field):
 - photoIndex: 0-based index of the photo (0 for first photo, 1 for second, etc.)
 - CRITICAL: Only annotate issues that are PHYSICALLY ON THE RUG - never mark floors, walls, or background
