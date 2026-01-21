@@ -60,6 +60,18 @@ const ClientSetPassword = () => {
 
       if (updateError) throw updateError;
 
+      // Track password set timestamp
+      if (accessToken) {
+        const { error: trackingError } = await supabase.rpc('update_client_access_tracking', {
+          _access_token: accessToken,
+          _first_accessed: false,
+          _password_set: true,
+        });
+        if (trackingError) {
+          console.error('Error updating password tracking:', trackingError);
+        }
+      }
+
       toast.success('Password set successfully!');
       
       // Redirect to the client portal

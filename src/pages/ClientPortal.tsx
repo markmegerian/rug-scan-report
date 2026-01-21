@@ -195,9 +195,19 @@ const ClientPortal = () => {
           .eq('id', accessData.id);
       }
 
+      // Track first access
+      const { error: trackingError } = await supabase.rpc('update_client_access_tracking', {
+        _access_token: accessToken,
+        _first_accessed: true,
+        _password_set: false,
+      });
+      if (trackingError) {
+        console.error('Error updating access tracking:', trackingError);
+      }
+
       setHasAccess(true);
       setClientJobAccessId(accessData.id);
-      
+
       const jobData = accessData.jobs as unknown as JobData;
       setJob(jobData);
 

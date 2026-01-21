@@ -100,28 +100,40 @@ export type Database = {
           access_token: string
           client_id: string | null
           created_at: string | null
+          email_error: string | null
+          email_sent_at: string | null
           expires_at: string | null
+          first_accessed_at: string | null
           id: string
           invited_email: string | null
           job_id: string
+          password_set_at: string | null
         }
         Insert: {
           access_token: string
           client_id?: string | null
           created_at?: string | null
+          email_error?: string | null
+          email_sent_at?: string | null
           expires_at?: string | null
+          first_accessed_at?: string | null
           id?: string
           invited_email?: string | null
           job_id: string
+          password_set_at?: string | null
         }
         Update: {
           access_token?: string
           client_id?: string | null
           created_at?: string | null
+          email_error?: string | null
+          email_sent_at?: string | null
           expires_at?: string | null
+          first_accessed_at?: string | null
           id?: string
           invited_email?: string | null
           job_id?: string
+          password_set_at?: string | null
         }
         Relationships: [
           {
@@ -529,6 +541,14 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      update_client_access_tracking: {
+        Args: {
+          _access_token: string
+          _first_accessed?: boolean
+          _password_set?: boolean
+        }
+        Returns: undefined
       }
       validate_access_token: {
         Args: { _token: string }
