@@ -376,65 +376,105 @@ const addPhotosToPDF = async (
 
 interface ServiceDescription {
   name: string;
-  priceRange: string;
   description: string;
 }
 
-// Extract service descriptions from all rugs' analysis reports
+/**
+ * Extract service descriptions from the "COMPREHENSIVE SERVICE DESCRIPTIONS" section
+ * of each rug's analysis report. The AI generates these as paragraphs with:
+ * "Service Name: Description text..."
+ */
 const extractAllServiceDescriptions = (rugs: Inspection[]): ServiceDescription[] => {
   const serviceMap = new Map<string, ServiceDescription>();
-  
-  // Common service patterns to look for
-  const servicePatterns = [
-    { pattern: /professional\s*(?:hand\s*)?cleaning/i, baseName: 'Professional Hand Cleaning' },
-    { pattern: /overnight\s*soak/i, baseName: 'Overnight Soaking' },
-    { pattern: /block(?:ing)?\s*(?:&|and)?\s*stretch/i, baseName: 'Blocking & Stretching' },
-    { pattern: /custom\s*pad(?:ding)?/i, baseName: 'Custom Padding' },
-    { pattern: /lime\s*wash/i, baseName: 'Lime Wash' },
-    { pattern: /persian\s*binding/i, baseName: 'Persian Binding' },
-    { pattern: /zenjireh|overcast/i, baseName: 'Zenjireh & Overcast' },
-    { pattern: /(?:fringe|edge)\s*repair/i, baseName: 'Repair' },
-    { pattern: /moth\s*proof/i, baseName: 'Moth Proofing Treatment' },
-    { pattern: /fiber\s*protection/i, baseName: 'Fiber Protection Treatment' },
-    { pattern: /stain\s*(?:removal|treatment)/i, baseName: 'Stain Treatment' },
-    { pattern: /deodori[sz]/i, baseName: 'Deodorizing Treatment' },
-  ];
   
   for (const rug of rugs) {
     if (!rug.analysis_report) continue;
     
-    const lines = rug.analysis_report.split('\n');
+    const report = rug.analysis_report;
     
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
+    // Find the COMPREHENSIVE SERVICE DESCRIPTIONS section
+    // It ends at RUG BREAKDOWN, ESTIMATED SERVICES, or similar section headers
+    const servicesSectionMatch = report.match(
+      /(?:COMPREHENSIVE\s+SERVICE\s+DESCRIPTIONS?|RECOMMENDED\s+SERVICES?|SERVICE\s+DESCRIPTIONS?)\s*\n+([\s\S]*?)(?=\n\s*(?:RUG\s+BREAKDOWN|ESTIMATED\s+SERVICES|RUG\s+#|TOTAL\s+ESTIMATE|ADDITIONAL\s+RECOMMENDED|NEXT\s+STEPS|Sincerely)|$)/i
+    );
+    
+    if (servicesSectionMatch) {
+      const servicesText = servicesSectionMatch[1].trim();
       
-      // Check for service headers (usually bold or with price)
-      for (const { pattern, baseName } of servicePatterns) {
-        if (pattern.test(line)) {
-          // Extract price if present
-          const priceMatch = line.match(/\$[\d,]+(?:\.\d{2})?(?:\s*[-–]\s*\$[\d,]+(?:\.\d{2})?)?/);
-          const priceRange = priceMatch ? priceMatch[0] : '';
+      // Parse service paragraphs - format is "Service Name: Description text"
+      // Services are typically separated by double newlines
+      const serviceParagraphs = servicesText.split(/\n\n+/).filter(p => p.trim());
+      
+      for (const para of serviceParagraphs) {
+        const trimmedPara = para.trim();
+        if (!trimmedPara || trimmedPara.length < 20) continue;
+        
+        // Pattern 1: "Service Name: Description..."
+        const colonMatch = trimmedPara.match(/^([A-Z][A-Za-z\s&\/\-]+?):\s*(.+)/s);
+        
+        if (colonMatch) {
+          const name = colonMatch[1].trim();
+          const description = colonMatch[2].trim().replace(/\s+/g, ' ');
           
-          // Look for description in following lines (until next header or cost line)
-          let description = '';
-          for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
-            const descLine = lines[j].trim();
-            if (!descLine) continue;
-            if (/^\*\*|^#|^\d+\.|^-\s*\$|^\$/.test(descLine)) break;
-            if (descLine.length > 30 && !descLine.includes('$')) {
-              description = descLine.replace(/^[-•*]\s*/, '');
-              break;
+          // Skip if it's just a header or too short
+          if (name.length > 3 && description.length > 30) {
+            const key = name.toLowerCase();
+            if (!serviceMap.has(key)) {
+              serviceMap.set(key, { name, description });
             }
           }
+        } else {
+          // Pattern 2: First sentence is the title, rest is description
+          // Look for a capitalized phrase at the start followed by description
+          const firstSentenceMatch = trimmedPara.match(/^([A-Z][A-Za-z\s&\/\-]{3,40})[.:]?\s+(.{50,})/s);
           
-          // Store or update
-          const key = baseName.toLowerCase();
-          if (!serviceMap.has(key) || (priceRange && !serviceMap.get(key)?.priceRange)) {
+          if (firstSentenceMatch) {
+            const potentialName = firstSentenceMatch[1].trim();
+            const potentialDesc = firstSentenceMatch[2].trim().replace(/\s+/g, ' ');
+            
+            // Check if it looks like a service name (not a full sentence)
+            if (potentialName.split(' ').length <= 6 && !potentialName.includes('.')) {
+              const key = potentialName.toLowerCase();
+              if (!serviceMap.has(key)) {
+                serviceMap.set(key, { 
+                  name: potentialName, 
+                  description: potentialDesc 
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Also try to extract from intro paragraph if it describes the rug/services
+    // Look for sentences that describe specific services
+    const introMatch = report.match(/^([\s\S]*?)(?=COMPREHENSIVE|RECOMMENDED\s+SERVICES|RUG\s+BREAKDOWN|ESTIMATED\s+SERVICES)/i);
+    if (introMatch && introMatch[1].length > 100) {
+      // Extract service mentions from intro (these often have inline descriptions)
+      const introText = introMatch[1];
+      
+      // Pattern for inline service descriptions: "Service Name" or "service name" followed by description
+      const inlineServices = [
+        { pattern: /professional\s+(?:hand\s+)?clean(?:ing)?[^.]*(?:involves?|includes?|provides?|is\s+)[^.]+\./gi, name: 'Professional Cleaning' },
+        { pattern: /blocking\s+(?:&|and)\s+stretching[^.]*(?:involves?|corrects?|restores?|is\s+)[^.]+\./gi, name: 'Blocking & Stretching' },
+        { pattern: /overnight\s+soak(?:ing)?[^.]*(?:involves?|allows?|provides?|is\s+)[^.]+\./gi, name: 'Overnight Soaking' },
+        { pattern: /custom\s+pad(?:ding)?[^.]*(?:provides?|offers?|is\s+)[^.]+\./gi, name: 'Custom Padding' },
+        { pattern: /moth\s+proof(?:ing)?[^.]*(?:protects?|prevents?|is\s+)[^.]+\./gi, name: 'Moth Proofing Treatment' },
+        { pattern: /fiber\s+protection[^.]*(?:protects?|repels?|is\s+)[^.]+\./gi, name: 'Fiber Protection Treatment' },
+        { pattern: /stain\s+(?:removal|treatment)[^.]*(?:removes?|treats?|is\s+)[^.]+\./gi, name: 'Stain Treatment' },
+        { pattern: /edge\s+(?:repair|restoration|binding)[^.]*(?:repairs?|restores?|secures?|is\s+)[^.]+\./gi, name: 'Edge Repair' },
+        { pattern: /fringe\s+(?:repair|restoration|securing)[^.]*(?:repairs?|secures?|is\s+)[^.]+\./gi, name: 'Fringe Repair' },
+      ];
+      
+      for (const { pattern, name } of inlineServices) {
+        const matches = introText.match(pattern);
+        if (matches && matches.length > 0) {
+          const key = name.toLowerCase();
+          if (!serviceMap.has(key)) {
             serviceMap.set(key, {
-              name: baseName,
-              priceRange,
-              description
+              name,
+              description: matches[0].replace(/\s+/g, ' ').trim()
             });
           }
         }
@@ -531,6 +571,16 @@ interface AdditionalService {
   description: string;
 }
 
+/**
+ * Extract additional/recommended services from the "ADDITIONAL RECOMMENDED SERVICES" section
+ * of each rug's analysis report. Format is typically:
+ * 
+ * ADDITIONAL RECOMMENDED SERVICES
+ * 
+ * Service Name: Description paragraph...
+ * 
+ * Service Name: $XXX.XX
+ */
 const extractAdditionalServices = (rugs: Inspection[]): AdditionalService[] => {
   const services: AdditionalService[] = [];
   const seenServices = new Set<string>();
@@ -538,44 +588,90 @@ const extractAdditionalServices = (rugs: Inspection[]): AdditionalService[] => {
   for (const rug of rugs) {
     if (!rug.analysis_report) continue;
     
-    const lines = rug.analysis_report.split('\n');
-    let inAdditionalSection = false;
+    const report = rug.analysis_report;
     
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      const lowerLine = line.toLowerCase();
+    // Find the ADDITIONAL RECOMMENDED SERVICES section
+    // It ends at NEXT STEPS or Sincerely
+    const additionalMatch = report.match(
+      /(?:ADDITIONAL\s+(?:RECOMMENDED\s+)?SERVICES?|STRONGLY\s+RECOMMENDED|OPTIONAL\s+SERVICES?)\s*\n+([\s\S]*?)(?=\n\s*(?:NEXT\s+STEPS|Sincerely|$))/i
+    );
+    
+    if (additionalMatch) {
+      const additionalText = additionalMatch[1].trim();
       
-      // Detect additional/optional services section
-      if (lowerLine.includes('additional') && (lowerLine.includes('service') || lowerLine.includes('recommend'))) {
-        inAdditionalSection = true;
-        continue;
-      }
+      // Parse service paragraphs - services are separated by double newlines
+      // or by cost lines that stand alone
+      const serviceParagraphs = additionalText.split(/\n\n+/).filter(p => p.trim());
       
-      if (inAdditionalSection && line) {
-        // Look for service headers with optional costs
-        if (line.startsWith('**') || /^[A-Z][A-Za-z\s&]+(?:\s*\(|:)/.test(line)) {
-          const costMatch = line.match(/\$[\d,]+(?:\.\d{2})?/);
-          const name = line.replace(/\*\*/g, '').replace(/\([^)]*\)/g, '').replace(/:\s*$/, '').trim();
+      let currentService: { name: string; description: string; cost?: string } | null = null;
+      
+      for (const para of serviceParagraphs) {
+        const trimmedPara = para.trim();
+        if (!trimmedPara) continue;
+        
+        // Check if this is a standalone cost line
+        const costOnlyMatch = trimmedPara.match(/^([A-Za-z][A-Za-z\s&\/\-\(\)]+?):\s*\$[\d,]+(?:\.\d{2})?$/);
+        if (costOnlyMatch) {
+          // This is a cost line for the previous service or a simple service listing
+          const costMatch = trimmedPara.match(/\$[\d,]+(?:\.\d{2})?/);
+          const name = costOnlyMatch[1].trim();
           
           if (!seenServices.has(name.toLowerCase()) && name.length > 3) {
             seenServices.add(name.toLowerCase());
-            
-            // Get description from following lines
-            let description = '';
-            for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
-              const descLine = lines[j].trim();
-              if (!descLine || descLine.startsWith('**') || descLine.startsWith('#')) break;
-              if (descLine.length > 30) {
-                description = descLine;
-                break;
-              }
-            }
-            
+            services.push({
+              name,
+              estimatedCost: costMatch ? costMatch[0] : undefined,
+              description: ''
+            });
+          }
+          continue;
+        }
+        
+        // Pattern: "Service Name: Description..."
+        const colonMatch = trimmedPara.match(/^([A-Z][A-Za-z\s&\/\-]+?):\s*(.+)/s);
+        
+        if (colonMatch) {
+          const name = colonMatch[1].trim();
+          let description = colonMatch[2].trim().replace(/\s+/g, ' ');
+          
+          // Extract cost if present in description
+          const costMatch = description.match(/\$[\d,]+(?:\.\d{2})?/);
+          
+          // Remove cost from description
+          description = description.replace(/\$[\d,]+(?:\.\d{2})?/, '').trim();
+          
+          if (!seenServices.has(name.toLowerCase()) && name.length > 3 && description.length > 20) {
+            seenServices.add(name.toLowerCase());
             services.push({
               name,
               estimatedCost: costMatch ? costMatch[0] : undefined,
               description
             });
+          }
+        }
+      }
+      
+      // Also look for any cost lines that follow a description paragraph
+      const costLines = additionalText.match(/^[A-Za-z][A-Za-z\s&\/\-\(\)]+:\s*\$[\d,]+(?:\.\d{2})?$/gm);
+      if (costLines) {
+        for (const line of costLines) {
+          const match = line.match(/^([A-Za-z][A-Za-z\s&\/\-\(\)]+?):\s*(\$[\d,]+(?:\.\d{2})?)$/);
+          if (match) {
+            const name = match[1].trim();
+            const cost = match[2];
+            
+            // Update existing service with cost or add new one
+            const existingService = services.find(s => s.name.toLowerCase() === name.toLowerCase());
+            if (existingService && !existingService.estimatedCost) {
+              existingService.estimatedCost = cost;
+            } else if (!seenServices.has(name.toLowerCase()) && name.length > 3) {
+              seenServices.add(name.toLowerCase());
+              services.push({
+                name,
+                estimatedCost: cost,
+                description: ''
+              });
+            }
           }
         }
       }
@@ -687,75 +783,31 @@ export const generateJobPDF = async (
   doc.text('COMPREHENSIVE SERVICE DESCRIPTIONS', margin, yPos);
   yPos += 10;
   
-  // Get service descriptions from all rugs
+  // Get service descriptions from all rugs using improved extraction
   const serviceDescriptions = extractAllServiceDescriptions(rugs);
   
-  // Also gather descriptions from analysis reports directly
-  const allDescriptions: { title: string; price: string; text: string }[] = [];
-  
-  for (const rug of rugs) {
-    if (!rug.analysis_report) continue;
-    
-    // Look for service description sections
-    const sections = rug.analysis_report.split(/\n(?=\*\*|(?:[A-Z][a-z]+\s+){1,3}(?:\([^)]+\))?:?\s*\$)/);
-    
-    for (const section of sections) {
-      const lines = section.trim().split('\n');
-      if (lines.length === 0) continue;
-      
-      const firstLine = lines[0].trim();
-      const priceMatch = firstLine.match(/\$[\d,]+(?:\.\d{2})?(?:\s*[-–]\s*\$[\d,]+(?:\.\d{2})?)?/);
-      
-      if (priceMatch) {
-        let title = firstLine.replace(/\*\*/g, '').replace(/\([^)]+\)/g, '').replace(/\$[\d,]+(?:\.\d{2})?(?:\s*[-–]\s*\$[\d,]+(?:\.\d{2})?)?/g, '').replace(/[:.]?\s*$/, '').trim();
-        
-        // Get description from remaining lines
-        let description = '';
-        for (let i = 1; i < lines.length; i++) {
-          const descLine = lines[i].trim();
-          if (descLine && !descLine.includes('$') && descLine.length > 20) {
-            description = descLine.replace(/^[-•*]\s*/, '');
-            break;
-          }
-        }
-        
-        if (title && !allDescriptions.find(d => d.title.toLowerCase() === title.toLowerCase())) {
-          allDescriptions.push({
-            title,
-            price: priceMatch[0],
-            text: description
-          });
-        }
-      }
-    }
-  }
-  
-  // Standard service descriptions if we couldn't extract them
-  const defaultServices: { title: string; price: string; text: string }[] = [
+  // Default service descriptions as fallback
+  const defaultServices: ServiceDescription[] = [
     {
-      title: 'Professional Hand Cleaning',
-      price: '$100.00-$275.00 per rug, based on size',
-      text: 'Our specialized hand cleaning process utilizes an immersion method specifically designed for delicate Oriental rugs, safely removing embedded soil, allergens, and contaminants that accumulate over time. We carefully assess each rug\'s unique fiber composition, dye stability, and construction to determine the most appropriate cleaning agents and techniques.'
+      name: 'Professional Hand Cleaning',
+      description: 'Our specialized hand cleaning process utilizes an immersion method specifically designed for delicate Oriental rugs, safely removing embedded soil, allergens, and contaminants that accumulate over time. We carefully assess each rug\'s unique fiber composition, dye stability, and construction to determine the most appropriate cleaning agents and techniques.'
     },
     {
-      title: 'Overnight Soaking',
-      price: '$50.00-$100.00 per rug, depending on size',
-      text: 'This intensive deep-cleaning treatment involves submerging your rug in a specially formulated solution for an extended period under careful monitoring. The process allows cleaning agents to penetrate deep into the foundation, dissolving contaminants, allergens, and odors that standard cleaning cannot reach.'
+      name: 'Overnight Soaking',
+      description: 'This intensive deep-cleaning treatment involves submerging your rug in a specially formulated solution for an extended period under careful monitoring. The process allows cleaning agents to penetrate deep into the foundation, dissolving contaminants, allergens, and odors that standard cleaning cannot reach.'
     },
     {
-      title: 'Blocking & Stretching',
-      price: 'Complimentary when overnight soaking is approved',
-      text: 'This essential restoration process corrects dimensional distortion in handwoven rugs by carefully realigning warp and weft threads to restore proper shape. Using specialized equipment, we gradually stretch the rug to its correct dimensions while damp, then secure it until completely dry.'
+      name: 'Blocking & Stretching',
+      description: 'This essential restoration process corrects dimensional distortion in handwoven rugs by carefully realigning warp and weft threads to restore proper shape. Using specialized equipment, we gradually stretch the rug to its correct dimensions while damp, then secure it until completely dry.'
     },
     {
-      title: 'Custom Padding',
-      price: '$25.00-$100.00 per rug, depending on size',
-      text: 'Our premium custom padding provides crucial support between your rug and floor surface using high-density, non-slip materials precisely cut to your rug\'s dimensions. This specialized padding extends your rug\'s lifespan by reducing fiber compression while allowing proper airflow.'
+      name: 'Custom Padding',
+      description: 'Our premium custom padding provides crucial support between your rug and floor surface using high-density, non-slip materials precisely cut to your rug\'s dimensions. This specialized padding extends your rug\'s lifespan by reducing fiber compression while allowing proper airflow.'
     }
   ];
   
-  // Use extracted descriptions or fall back to defaults
-  const servicesToShow = allDescriptions.length > 0 ? allDescriptions : defaultServices;
+  // Use extracted descriptions if we found any, otherwise use defaults
+  const servicesToShow = serviceDescriptions.length > 0 ? serviceDescriptions : defaultServices;
   
   for (const service of servicesToShow) {
     // Check for page break
@@ -764,19 +816,19 @@ export const generateJobPDF = async (
       yPos = addSimplePageHeader(doc, pageWidth, branding);
     }
     
-    // Service title with price
+    // Service title (without price - prices are in the breakdown section)
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...COLORS.primary);
-    doc.text(`${service.title} (${service.price})`, margin, yPos);
+    doc.text(service.name, margin, yPos);
     yPos += 7;
     
     // Description
-    if (service.text) {
+    if (service.description) {
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...COLORS.text);
-      const descLines = doc.splitTextToSize(service.text, pageWidth - margin * 2);
+      const descLines = doc.splitTextToSize(service.description, pageWidth - margin * 2);
       descLines.forEach((line: string) => {
         if (yPos > pageHeight - 25) {
           doc.addPage();
