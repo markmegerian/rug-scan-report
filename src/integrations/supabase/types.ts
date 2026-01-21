@@ -456,6 +456,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      client_has_job_access: {
+        Args: { check_job_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
