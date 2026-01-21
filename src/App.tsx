@@ -25,6 +25,12 @@ const ClientHistory = lazy(() => import("./pages/ClientHistory"));
 const ClientSetPassword = lazy(() => import("./pages/ClientSetPassword"));
 const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
 
+// Admin Pages
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const AdminUserDetail = lazy(() => import("./pages/admin/AdminUserDetail"));
+const AdminPayouts = lazy(() => import("./pages/admin/AdminPayouts"));
+
 const queryClient = new QueryClient();
 
 // Loading fallback component
@@ -59,6 +65,12 @@ const App = () => (
               <Route path="/client/set-password" element={<ClientSetPassword />} />
               <Route path="/client/payment-success" element={<PaymentSuccess />} />
               <Route path="/client/:accessToken" element={<ClientPortal />} />
+              
+              {/* Admin Routes */}
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/admin/users/:userId" element={<AdminUserDetail />} />
+              <Route path="/admin/payouts" element={<AdminPayouts />} />
               
               <Route path="*" element={<NotFound />} />
             </Routes>

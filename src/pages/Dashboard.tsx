@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Calendar, Briefcase, Eye, Plus, LogOut, Loader2, ChevronRight, PlayCircle, Clock, CheckCircle, Settings, History, BarChart3, DollarSign } from 'lucide-react';
+import { Search, Calendar, Briefcase, Eye, Plus, LogOut, Loader2, ChevronRight, PlayCircle, Clock, CheckCircle, Settings, History, BarChart3, DollarSign, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { format } from 'date-fns';
 import rugboostLogo from '@/assets/rugboost-logo.svg';
 import NotificationBell from '@/components/NotificationBell';
@@ -55,6 +56,7 @@ interface Job {
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading, signOut } = useAuth();
+  const { isAdmin } = useAdminAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -175,6 +177,12 @@ const Dashboard = () => {
               <DollarSign className="h-4 w-4" />
               A/R
             </Button>
+            {isAdmin && (
+              <Button onClick={() => navigate('/admin')} variant="outline" size="sm" className="gap-2 hidden sm:flex">
+                <Shield className="h-4 w-4" />
+                Admin
+              </Button>
+            )}
             <NotificationBell />
             <Button onClick={() => navigate('/settings')} variant="ghost" size="icon">
               <Settings className="h-4 w-4" />
