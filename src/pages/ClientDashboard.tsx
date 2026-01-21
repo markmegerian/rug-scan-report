@@ -273,7 +273,7 @@ const ClientDashboard = () => {
                               <ChevronRight className="h-5 w-5 text-muted-foreground" />
                             </div>
                           </CardHeader>
-                          <CardContent className="pt-0">
+                          <CardContent className="pt-0 space-y-3">
                             <div className="flex items-center justify-between">
                               <Badge 
                                 variant="outline" 
@@ -288,6 +288,18 @@ const ClientDashboard = () => {
                                 </span>
                               )}
                             </div>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="w-full"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/client/${job.access_token}`);
+                              }}
+                            >
+                              View Details & Reports
+                              <ChevronRight className="h-4 w-4 ml-1" />
+                            </Button>
                           </CardContent>
                         </Card>
                       );
@@ -330,7 +342,7 @@ const ClientDashboard = () => {
                               <ChevronRight className="h-5 w-5 text-muted-foreground" />
                             </div>
                           </CardHeader>
-                          <CardContent className="pt-0">
+                          <CardContent className="pt-0 space-y-3">
                             <div className="flex items-center justify-between">
                               <Badge 
                                 variant="outline" 
@@ -345,6 +357,18 @@ const ClientDashboard = () => {
                                 </span>
                               )}
                             </div>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="w-full"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/client/${job.access_token}`);
+                              }}
+                            >
+                              View Details & Reports
+                              <ChevronRight className="h-4 w-4 ml-1" />
+                            </Button>
                           </CardContent>
                         </Card>
                       );
