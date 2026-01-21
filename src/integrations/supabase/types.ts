@@ -395,6 +395,7 @@ export type Database = {
           job_id: string
           metadata: Json | null
           paid_at: string | null
+          platform_fee: number | null
           status: string
           stripe_checkout_session_id: string | null
           stripe_payment_intent_id: string | null
@@ -409,6 +410,7 @@ export type Database = {
           job_id: string
           metadata?: Json | null
           paid_at?: string | null
+          platform_fee?: number | null
           status?: string
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
@@ -423,6 +425,7 @@ export type Database = {
           job_id?: string
           metadata?: Json | null
           paid_at?: string | null
+          platform_fee?: number | null
           status?: string
           stripe_checkout_session_id?: string | null
           stripe_payment_intent_id?: string | null
@@ -450,12 +453,14 @@ export type Database = {
           amount: number
           created_at: string | null
           created_by: string | null
+          gross_revenue: number | null
           id: string
           notes: string | null
           paid_at: string | null
           payment_method: string | null
           period_end: string | null
           period_start: string | null
+          platform_fees_deducted: number | null
           reference_number: string | null
           status: string
           updated_at: string | null
@@ -465,12 +470,14 @@ export type Database = {
           amount: number
           created_at?: string | null
           created_by?: string | null
+          gross_revenue?: number | null
           id?: string
           notes?: string | null
           paid_at?: string | null
           payment_method?: string | null
           period_end?: string | null
           period_start?: string | null
+          platform_fees_deducted?: number | null
           reference_number?: string | null
           status?: string
           updated_at?: string | null
@@ -480,16 +487,45 @@ export type Database = {
           amount?: number
           created_at?: string | null
           created_by?: string | null
+          gross_revenue?: number | null
           id?: string
           notes?: string | null
           paid_at?: string | null
           payment_method?: string | null
           period_end?: string | null
           period_start?: string | null
+          platform_fees_deducted?: number | null
           reference_number?: string | null
           status?: string
           updated_at?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      platform_settings: {
+        Row: {
+          description: string | null
+          id: string
+          setting_key: string
+          setting_value: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          description?: string | null
+          id?: string
+          setting_key: string
+          setting_value: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          setting_key?: string
+          setting_value?: string
+          updated_at?: string | null
+          updated_by?: string | null
         }
         Relationships: []
       }

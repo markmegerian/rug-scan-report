@@ -414,6 +414,7 @@ const AdminUserDetail = () => {
         businessUserId={userId!}
         businessName={businessName}
         maxAmount={outstandingBalance}
+        grossRevenue={totalRevenue}
         onSuccess={fetchUserData}
       />
     </div>
