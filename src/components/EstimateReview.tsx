@@ -59,6 +59,51 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
     setServices(extractedServices);
   }, [report]);
 
+  // Determine priority based on service type
+  const getServicePriority = (serviceName: string): 'high' | 'medium' | 'low' => {
+    const lowerName = serviceName.toLowerCase();
+    
+    // High priority - essential cleaning and structural repairs
+    if (lowerName.includes('cleaning') || 
+        lowerName.includes('wash') ||
+        lowerName.includes('stain removal') ||
+        lowerName.includes('repair') ||
+        lowerName.includes('reweaving') ||
+        lowerName.includes('hole') ||
+        lowerName.includes('tear') ||
+        lowerName.includes('foundation') ||
+        lowerName.includes('dry rot') ||
+        lowerName.includes('soaking')) {
+      return 'high';
+    }
+    
+    // Medium priority - structural maintenance and edge work
+    if (lowerName.includes('binding') ||
+        lowerName.includes('overcast') ||
+        lowerName.includes('fringe') ||
+        lowerName.includes('edge') ||
+        lowerName.includes('selvedge') ||
+        lowerName.includes('blocking') ||
+        lowerName.includes('stretching') ||
+        lowerName.includes('shearing') ||
+        lowerName.includes('zenjireh')) {
+      return 'medium';
+    }
+    
+    // Low priority - protection and optional services
+    if (lowerName.includes('protection') ||
+        lowerName.includes('moth proof') ||
+        lowerName.includes('padding') ||
+        lowerName.includes('fiber protect') ||
+        lowerName.includes('scotchgard') ||
+        lowerName.includes('storage')) {
+      return 'low';
+    }
+    
+    // Default to medium
+    return 'medium';
+  };
+
   const parseReportForServices = (reportText: string): ServiceItem[] => {
     const services: ServiceItem[] = [];
     const lines = reportText.split('\n');
@@ -127,7 +172,7 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
               name: serviceName,
               quantity: 1,
               unitPrice: price,
-              priority: 'medium',
+              priority: getServicePriority(serviceName),
             });
           }
         }
@@ -167,7 +212,7 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
               name: serviceName,
               quantity: 1,
               unitPrice: price,
-              priority: 'medium',
+              priority: getServicePriority(serviceName),
             });
           }
         }
