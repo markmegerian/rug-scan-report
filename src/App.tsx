@@ -14,10 +14,12 @@ const NewJob = lazy(() => import("./pages/NewJob"));
 const JobDetail = lazy(() => import("./pages/JobDetail"));
 const AccountSettings = lazy(() => import("./pages/AccountSettings"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const History = lazy(() => import("./pages/History"));
 
 // Client Portal Pages
 const ClientAuth = lazy(() => import("./pages/ClientAuth"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
+const ClientHistory = lazy(() => import("./pages/ClientHistory"));
 const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
 
 const queryClient = new QueryClient();
@@ -44,9 +46,11 @@ const App = () => (
               <Route path="/jobs/new" element={<NewJob />} />
               <Route path="/jobs/:jobId" element={<JobDetail />} />
               <Route path="/settings" element={<AccountSettings />} />
+              <Route path="/history" element={<History />} />
               
               {/* Client Portal Routes */}
               <Route path="/client/auth" element={<ClientAuth />} />
+              <Route path="/client/history" element={<ClientHistory />} />
               <Route path="/client/payment-success" element={<PaymentSuccess />} />
               <Route path="/client/:accessToken" element={<ClientPortal />} />
               

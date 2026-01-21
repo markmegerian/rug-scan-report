@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Calendar, Briefcase, Eye, Plus, LogOut, Loader2, ChevronRight, PlayCircle, Clock, CheckCircle, Settings } from 'lucide-react';
+import { Search, Calendar, Briefcase, Eye, Plus, LogOut, Loader2, ChevronRight, PlayCircle, Clock, CheckCircle, Settings, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -161,6 +161,10 @@ const Dashboard = () => {
             <Button onClick={() => navigate('/jobs/new')} size="sm" className="gap-2">
               <Plus className="h-4 w-4" />
               New Job
+            </Button>
+            <Button onClick={() => navigate('/history')} variant="outline" size="sm" className="gap-2">
+              <History className="h-4 w-4" />
+              History
             </Button>
             <Button onClick={() => navigate('/settings')} variant="ghost" size="sm" className="gap-2">
               <Settings className="h-4 w-4" />
