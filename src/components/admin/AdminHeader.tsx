@@ -48,6 +48,10 @@ export const AdminHeader = ({ title = 'Platform Admin', subtitle = 'Manage busin
           <Button onClick={() => navigate('/admin/settings')} variant="ghost" size="icon" title="Platform Settings">
             <Settings className="h-4 w-4" />
           </Button>
+          <div className="h-6 w-px bg-border mx-1" />
+          <Button onClick={() => navigate('/dashboard')} variant="outline" size="sm" className="gap-2">
+            Exit Admin
+          </Button>
           <Button onClick={handleSignOut} variant="ghost" size="icon">
             <LogOut className="h-4 w-4" />
           </Button>
