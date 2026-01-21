@@ -530,6 +530,19 @@ export type Database = {
         }
         Returns: boolean
       }
+      validate_access_token: {
+        Args: { _token: string }
+        Returns: {
+          access_id: string
+          client_id: string
+          client_name: string
+          invited_email: string
+          job_id: string
+          job_number: string
+          job_status: string
+          staff_user_id: string
+        }[]
+      }
     }
     Enums: {
       app_role: "staff" | "client"

@@ -97,20 +97,18 @@ const ClientPortal = () => {
 
   const fetchBrandingForPasswordSetup = async () => {
     try {
-      // Get access data to find the staff user
-      const { data: accessData } = await supabase
-        .from('client_job_access')
-        .select('jobs (user_id)')
-        .eq('access_token', accessToken)
+      // Use secure RPC function to validate token and get staff user
+      const { data: tokenData, error: tokenError } = await supabase
+        .rpc('validate_access_token', { _token: accessToken })
         .single();
 
       let businessName = 'Rug Cleaning';
       
-      if (accessData?.jobs) {
+      if (!tokenError && tokenData?.staff_user_id) {
         const { data: brandingData } = await supabase
           .from('profiles')
           .select('business_name')
-          .eq('user_id', (accessData.jobs as any).user_id)
+          .eq('user_id', tokenData.staff_user_id)
           .single();
         
         if (brandingData?.business_name) {
@@ -131,30 +129,31 @@ const ClientPortal = () => {
 
     setLoading(true);
     try {
-      // Check if this user has access to this job
-      const { data: accessData, error: accessError } = await supabase
-        .from('client_job_access')
-        .select(`
-          id,
-          job_id,
-          client_id,
-          jobs (
-            id,
-            job_number,
-            client_name,
-            status,
-            user_id
-          )
-        `)
-        .eq('access_token', accessToken)
+      // Use secure RPC function to validate token
+      const { data: tokenData, error: tokenError } = await supabase
+        .rpc('validate_access_token', { _token: accessToken })
         .single();
 
-      if (accessError) throw accessError;
-      if (!accessData || !accessData.jobs) {
+      if (tokenError || !tokenData) {
         toast.error('Invalid or expired access link');
         navigate('/');
         return;
       }
+
+      // Build access data structure from RPC result
+      const accessData = {
+        id: tokenData.access_id as string,
+        job_id: tokenData.job_id as string,
+        client_id: tokenData.client_id as string | null,
+        jobs: {
+          id: tokenData.job_id as string,
+          job_number: tokenData.job_number as string,
+          client_name: tokenData.client_name as string,
+          status: tokenData.job_status as string,
+          user_id: tokenData.staff_user_id as string
+        }
+      };
+      
 
       // Check if user's client account is linked
       const { data: clientAccount } = await supabase

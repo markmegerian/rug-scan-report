@@ -42,29 +42,29 @@ const ClientAuth = () => {
       }
 
       try {
-        // Check if there's an invitation for this token
-        const { data: accessData } = await supabase
-          .from('client_job_access')
-          .select('invited_email, jobs (user_id)')
-          .eq('access_token', accessToken)
+        // Use secure RPC function to validate token and get invitation details
+        const { data: tokenData, error: tokenError } = await supabase
+          .rpc('validate_access_token', { _token: accessToken })
           .single();
 
-        if (accessData?.invited_email) {
-          setInvitedEmail(accessData.invited_email);
-          setLoginEmail(accessData.invited_email);
-          setSignupEmail(accessData.invited_email);
-        }
+        if (!tokenError && tokenData) {
+          if (tokenData.invited_email) {
+            setInvitedEmail(tokenData.invited_email);
+            setLoginEmail(tokenData.invited_email);
+            setSignupEmail(tokenData.invited_email);
+          }
 
-        // Get business name for display
-        if (accessData?.jobs) {
-          const { data: brandingData } = await supabase
-            .from('profiles')
-            .select('business_name')
-            .eq('user_id', (accessData.jobs as any).user_id)
-            .single();
-          
-          if (brandingData?.business_name) {
-            setBusinessName(brandingData.business_name);
+          // Get business name for display
+          if (tokenData.staff_user_id) {
+            const { data: brandingData } = await supabase
+              .from('profiles')
+              .select('business_name')
+              .eq('user_id', tokenData.staff_user_id)
+              .single();
+            
+            if (brandingData?.business_name) {
+              setBusinessName(brandingData.business_name);
+            }
           }
         }
       } catch (error) {
