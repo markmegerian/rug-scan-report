@@ -136,7 +136,14 @@ serve(async (req) => {
       }
     }
 
-    // Store pending payment
+    // Check for existing pending payment for this job and delete it
+    await supabaseAdmin
+      .from("payments")
+      .delete()
+      .eq("job_id", jobId)
+      .eq("status", "pending");
+
+    // Store new pending payment
     await supabaseAdmin.from("payments").insert({
       job_id: jobId,
       client_id: clientId,

@@ -378,7 +378,20 @@ const JobDetail = () => {
       // Generate a unique access token
       const accessToken = crypto.randomUUID();
 
-      // Create client job access record first
+      // Delete any existing pending payments for this job (to avoid duplicates when re-generating)
+      await supabase
+        .from('payments')
+        .delete()
+        .eq('job_id', jobId)
+        .eq('status', 'pending');
+
+      // Delete any existing client_job_access records for this job (to avoid duplicates)
+      await supabase
+        .from('client_job_access')
+        .delete()
+        .eq('job_id', jobId);
+
+      // Create client job access record
       const { error } = await supabase
         .from('client_job_access')
         .insert({

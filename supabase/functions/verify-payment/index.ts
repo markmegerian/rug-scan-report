@@ -83,7 +83,7 @@ serve(async (req) => {
         if (job?.user_id) {
           const { data: profileData } = await supabaseAdmin
             .from("profiles")
-            .select("business_email, business_name, business_phone")
+            .select("business_email, business_name, business_phone, business_address")
             .eq("user_id", job.user_id)
             .single();
           profile = profileData;
@@ -175,7 +175,7 @@ serve(async (req) => {
                   businessName: profile?.business_name,
                   businessEmail: profile?.business_email,
                   businessPhone: profile?.business_phone,
-                  businessAddress: null, // Could fetch from profile if available
+                  businessAddress: profile?.business_address || null,
                   paidAt: new Date().toISOString(),
                 },
               });
