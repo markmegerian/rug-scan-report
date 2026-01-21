@@ -63,98 +63,118 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
     const services: ServiceItem[] = [];
     const lines = reportText.split('\n');
     
-    let inServicesSection = false;
-    let inCostsSection = false;
+    let inBreakdownSection = false;
     
     for (const line of lines) {
       const lowerLine = line.toLowerCase();
+      const trimmedLine = line.trim();
       
-      // Detect sections
-      if (lowerLine.includes('recommended service') || lowerLine.includes('services needed')) {
-        inServicesSection = true;
-        inCostsSection = false;
-        continue;
-      }
-      if (lowerLine.includes('estimated cost') || lowerLine.includes('cost estimate') || lowerLine.includes('pricing')) {
-        inCostsSection = true;
-        inServicesSection = false;
-        continue;
-      }
-      if (lowerLine.includes('total') && lowerLine.includes('cost')) {
-        inCostsSection = false;
-        continue;
-      }
-      if (lowerLine.includes('timeline') || lowerLine.includes('recommendation')) {
-        inServicesSection = false;
-        inCostsSection = false;
+      // Detect the RUG BREAKDOWN AND SERVICES section or similar headers
+      if (lowerLine.includes('rug breakdown') || 
+          lowerLine.includes('estimate of services') ||
+          lowerLine.includes('services and costs') ||
+          lowerLine.includes('itemized list')) {
+        inBreakdownSection = true;
         continue;
       }
       
-      // Parse service/cost lines
-      if ((inServicesSection || inCostsSection) && (line.startsWith('- ') || line.startsWith('* '))) {
-        const content = line.replace(/^[-*]\s*/, '').trim();
+      // Stop parsing at certain sections
+      if (lowerLine.includes('total estimate') || 
+          lowerLine.includes('total investment') ||
+          lowerLine.includes('next steps') ||
+          lowerLine.includes('sincerely') ||
+          lowerLine.includes('additional protection')) {
+        inBreakdownSection = false;
+        continue;
+      }
+      
+      // Skip rug headers (e.g., "Rug #1: Persian (8x10)")
+      if (lowerLine.startsWith('rug #') || lowerLine.startsWith('rug:')) {
+        continue;
+      }
+      
+      // Skip subtotal lines
+      if (lowerLine.includes('subtotal')) {
+        continue;
+      }
+      
+      // Parse service lines with format "Service Name: $amount" or "- Service Name: $amount"
+      if (inBreakdownSection && trimmedLine.length > 0) {
+        // Match pattern: "Service Name: $123.45" or "- Service Name: $123.45"
+        const serviceMatch = trimmedLine.match(/^[-*]?\s*(.+?):\s*\$([0-9,]+(?:\.[0-9]{2})?)/);
         
-        // Try to extract price
-        const priceMatch = content.match(/\$([0-9,]+(?:\.[0-9]{2})?)/);
-        const price = priceMatch ? parseFloat(priceMatch[1].replace(',', '')) : 0;
-        
-        // Try to extract priority
-        let priority: 'high' | 'medium' | 'low' = 'medium';
-        if (lowerLine.includes('high priority') || lowerLine.includes('urgent') || lowerLine.includes('critical')) {
-          priority = 'high';
-        } else if (lowerLine.includes('low priority') || lowerLine.includes('optional')) {
-          priority = 'low';
-        }
-        
-        // Extract service name (before price or colon)
-        let serviceName = content;
-        if (priceMatch) {
-          serviceName = content.substring(0, content.indexOf('$')).trim();
-        }
-        // Clean up common patterns
-        serviceName = serviceName
-          .replace(/:\s*$/, '')
-          .replace(/\s*-\s*$/, '')
-          .replace(/\*\*/g, '')
-          .replace(/^\d+\.\s*/, '')
-          .trim();
-        
-        // Skip if too short or looks like a header
-        if (serviceName.length < 3 || serviceName.endsWith(':')) continue;
-        
-        // Check if this service already exists
-        const existingIndex = services.findIndex(
-          s => s.name.toLowerCase() === serviceName.toLowerCase()
-        );
-        
-        if (existingIndex >= 0) {
-          // Update price if found
-          if (price > 0) {
-            services[existingIndex].unitPrice = price;
+        if (serviceMatch) {
+          const serviceName = serviceMatch[1].trim();
+          const price = parseFloat(serviceMatch[2].replace(',', ''));
+          
+          // Skip if service name is too short or looks like a header
+          if (serviceName.length < 3) continue;
+          
+          // Check if this service already exists
+          const existingIndex = services.findIndex(
+            s => s.name.toLowerCase() === serviceName.toLowerCase()
+          );
+          
+          if (existingIndex >= 0) {
+            // Update price if found and add to quantity
+            services[existingIndex].quantity += 1;
+            if (price > 0 && services[existingIndex].unitPrice === 0) {
+              services[existingIndex].unitPrice = price;
+            }
+          } else {
+            services.push({
+              id: crypto.randomUUID(),
+              name: serviceName,
+              quantity: 1,
+              unitPrice: price,
+              priority: 'medium',
+            });
           }
-        } else {
-          services.push({
-            id: crypto.randomUUID(),
-            name: serviceName,
-            quantity: 1,
-            unitPrice: price,
-            priority,
-          });
         }
       }
     }
     
-    // Match with available services to get proper pricing
-    return services.map(service => {
-      const matchedService = availableServices.find(
-        as => as.name.toLowerCase().includes(service.name.toLowerCase()) ||
-              service.name.toLowerCase().includes(as.name.toLowerCase())
-      );
-      if (matchedService && service.unitPrice === 0) {
-        return { ...service, unitPrice: matchedService.unitPrice };
+    // If no services were found in structured format, try alternative parsing
+    if (services.length === 0) {
+      // Look for any line with a dollar amount and service-like name
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        const priceMatch = trimmedLine.match(/^(.+?):\s*\$([0-9,]+(?:\.[0-9]{2})?)/);
+        
+        if (priceMatch) {
+          const serviceName = priceMatch[1].trim()
+            .replace(/^[-*]\s*/, '')
+            .replace(/\*\*/g, '');
+          const price = parseFloat(priceMatch[2].replace(',', ''));
+          
+          // Skip common non-service lines
+          const lowerName = serviceName.toLowerCase();
+          if (lowerName.includes('subtotal') || 
+              lowerName.includes('total') ||
+              lowerName.includes('rug #') ||
+              serviceName.length < 3) {
+            continue;
+          }
+          
+          // Check if already exists
+          const existingIndex = services.findIndex(
+            s => s.name.toLowerCase() === serviceName.toLowerCase()
+          );
+          
+          if (existingIndex < 0) {
+            services.push({
+              id: crypto.randomUUID(),
+              name: serviceName,
+              quantity: 1,
+              unitPrice: price,
+              priority: 'medium',
+            });
+          }
+        }
       }
-      return service;
-    });
+    }
+    
+    return services;
   };
 
   const handleUpdateService = (id: string, updates: Partial<ServiceItem>) => {
