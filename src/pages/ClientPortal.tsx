@@ -204,7 +204,7 @@ const ClientPortal = () => {
         setBranding(brandingData);
       }
 
-      // Fetch rugs with approved estimates
+      // Fetch rugs for this job
       const { data: rugsData, error: rugsError } = await supabase
         .from('inspections')
         .select(`
@@ -214,26 +214,30 @@ const ClientPortal = () => {
           length,
           width,
           photo_urls,
-          analysis_report,
-          approved_estimates (
-            id,
-            services,
-            total_amount
-          )
+          analysis_report
         `)
         .eq('job_id', jobData.id);
 
       if (rugsError) throw rugsError;
 
+      // Fetch approved estimates separately (RLS uses job_id directly)
+      const { data: estimatesData, error: estimatesError } = await supabase
+        .from('approved_estimates')
+        .select('id, inspection_id, services, total_amount')
+        .eq('job_id', jobData.id);
+
+      if (estimatesError) throw estimatesError;
+
+      // Create a map of inspection_id -> estimate for quick lookup
+      const estimateMap = new Map<string, { id: string; services: unknown; total_amount: number }>();
+      (estimatesData || []).forEach(est => {
+        estimateMap.set(est.inspection_id, est);
+      });
+
       const processedRugs: RugData[] = (rugsData || [])
-        .filter(r => {
-          // Cast to array since Supabase returns array for one-to-many relations
-          const estimates = r.approved_estimates as unknown as Array<{ id: string; services: unknown; total_amount: number }>;
-          return estimates && estimates.length > 0;
-        })
+        .filter(r => estimateMap.has(r.id))
         .map(r => {
-          const estimates = r.approved_estimates as unknown as Array<{ id: string; services: unknown; total_amount: number }>;
-          const estimate = estimates[0];
+          const estimate = estimateMap.get(r.id)!;
           return {
             id: r.id,
             rug_number: r.rug_number,
