@@ -595,7 +595,7 @@ export const generateJobPDF = async (
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.navy);
-  doc.text('● ESTIMATE NUMBER', margin, yPos);
+  doc.text('ESTIMATE NUMBER', margin, yPos);
   yPos += 6;
   
   doc.setFontSize(11);
@@ -608,7 +608,7 @@ export const generateJobPDF = async (
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.navy);
-  doc.text('● DATE PREPARED', rightCol, yPos - 6);
+  doc.text('DATE PREPARED', rightCol, yPos - 6);
   
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
@@ -621,7 +621,7 @@ export const generateJobPDF = async (
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.navy);
-  doc.text('● PREPARED FOR', margin, yPos);
+  doc.text('PREPARED FOR', margin, yPos);
   yPos += 8;
   
   doc.setFontSize(11);
@@ -689,11 +689,11 @@ export const generateJobPDF = async (
       yPos = 30;
     }
     
-    // Diamond bullet + service name in teal
+    // Service name in teal with dash bullet
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...COLORS.teal);
-    doc.text(`◆ ${service.name}`, margin, yPos);
+    doc.text(`- ${service.name}`, margin, yPos);
     yPos += 7;
     
     // Description
@@ -742,12 +742,12 @@ export const generateJobPDF = async (
     yPos = drawRugEntryHeader(doc, `Rug #${costs.rugNumber}: ${costs.rugType}${dimensionStr}`, margin, yPos, contentWidth);
     yPos += 4;
     
-    // Service items with dot leader and price
+    // Service items with dash and price
     for (const item of costs.items) {
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...COLORS.text);
-      doc.text(`· ${item.service}`, margin + 8, yPos);
+      doc.text(`- ${item.service}`, margin + 8, yPos);
       
       // Price in gold, italic, right-aligned
       doc.setFont('helvetica', 'italic');
@@ -775,7 +775,7 @@ export const generateJobPDF = async (
       doc.setFontSize(8);
       doc.setFont('helvetica', 'italic');
       doc.setTextColor(...COLORS.textMuted);
-      const noteLines = doc.splitTextToSize(`■ ${costs.specialNote}`, contentWidth - 16);
+      const noteLines = doc.splitTextToSize(`* ${costs.specialNote}`, contentWidth - 16);
       noteLines.forEach((line: string) => {
         doc.text(line, margin + 8, yPos);
         yPos += 4;
@@ -1006,8 +1006,8 @@ export const generateJobPDFBase64 = async (
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.navy);
-  doc.text('● ESTIMATE NUMBER', margin, yPos);
-  doc.text('● DATE PREPARED', margin + contentWidth / 2, yPos);
+  doc.text('ESTIMATE NUMBER', margin, yPos);
+  doc.text('DATE PREPARED', margin + contentWidth / 2, yPos);
   yPos += 6;
   
   doc.setFontSize(11);
@@ -1021,7 +1021,7 @@ export const generateJobPDFBase64 = async (
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(...COLORS.navy);
-  doc.text('● PREPARED FOR', margin, yPos);
+  doc.text('PREPARED FOR', margin, yPos);
   yPos += 8;
   
   doc.setFontSize(11);
@@ -1081,7 +1081,7 @@ export const generateJobPDFBase64 = async (
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...COLORS.teal);
-    doc.text(`◆ ${service.name}`, margin, yPos);
+    doc.text(`- ${service.name}`, margin, yPos);
     yPos += 7;
     
     if (service.description) {
@@ -1125,7 +1125,7 @@ export const generateJobPDFBase64 = async (
       doc.setFontSize(9);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...COLORS.text);
-      doc.text(`· ${item.service}`, margin + 8, yPos);
+      doc.text(`- ${item.service}`, margin + 8, yPos);
       
       doc.setFont('helvetica', 'italic');
       doc.setTextColor(...COLORS.gold);
@@ -1149,7 +1149,7 @@ export const generateJobPDFBase64 = async (
       doc.setFontSize(8);
       doc.setFont('helvetica', 'italic');
       doc.setTextColor(...COLORS.textMuted);
-      doc.text(`■ ${costs.specialNote}`, margin + 8, yPos);
+      doc.text(`* ${costs.specialNote}`, margin + 8, yPos);
       yPos += 4;
     }
     
