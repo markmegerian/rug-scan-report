@@ -31,6 +31,7 @@ const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
 const AdminUserDetail = lazy(() => import("./pages/admin/AdminUserDetail"));
 const AdminPayouts = lazy(() => import("./pages/admin/AdminPayouts"));
 const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
+const AdminAuditLog = lazy(() => import("./pages/admin/AdminAuditLog"));
 
 const queryClient = new QueryClient();
 
@@ -73,6 +74,7 @@ const App = () => (
               <Route path="/admin/users/:userId" element={<AdminUserDetail />} />
               <Route path="/admin/payouts" element={<AdminPayouts />} />
               <Route path="/admin/settings" element={<AdminSettings />} />
+              <Route path="/admin/audit-log" element={<AdminAuditLog />} />
               
               <Route path="*" element={<NotFound />} />
             </Routes>

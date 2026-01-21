@@ -7,8 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuditLog } from '@/hooks/useAuditLog';
 
 export const AdminNotificationSettings = () => {
+  const { logAction } = useAuditLog();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
@@ -69,6 +71,13 @@ export const AdminNotificationSettings = () => {
 
         if (error) throw error;
       }
+
+      // Log the action
+      logAction({
+        action: 'settings_updated',
+        entity_type: 'notification_settings',
+        details: settings,
+      });
 
       toast.success('Notification settings saved');
     } catch (error) {

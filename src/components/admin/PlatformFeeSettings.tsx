@@ -7,9 +7,11 @@ import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuditLog } from '@/hooks/useAuditLog';
 
 export const PlatformFeeSettings = () => {
   const { user } = useAuth();
+  const { logAction } = useAuditLog();
   const [feePercentage, setFeePercentage] = useState('10');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -55,6 +57,15 @@ export const PlatformFeeSettings = () => {
         .eq('setting_key', 'platform_fee_percentage');
 
       if (error) throw error;
+      
+      // Log the action
+      logAction({
+        action: 'fee_updated',
+        entity_type: 'platform_settings',
+        entity_id: 'platform_fee_percentage',
+        details: { new_value: feePercentage },
+      });
+      
       toast.success(`Platform fee updated to ${feePercentage}%`);
     } catch (error) {
       console.error('Error updating platform fee:', error);

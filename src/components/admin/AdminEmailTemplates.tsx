@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuditLog } from '@/hooks/useAuditLog';
 
 interface AdminEmailTemplate {
   id?: string;
@@ -69,6 +70,7 @@ const TEMPLATE_VARIABLES = [
 ];
 
 export const AdminEmailTemplates: React.FC = () => {
+  const { logAction } = useAuditLog();
   const [templates, setTemplates] = useState<Record<string, AdminEmailTemplate>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -144,6 +146,14 @@ export const AdminEmailTemplates: React.FC = () => {
         });
 
       if (error) throw error;
+
+      // Log the action
+      logAction({
+        action: 'settings_updated',
+        entity_type: 'email_template',
+        entity_id: type,
+        details: { template_type: type },
+      });
 
       toast.success('Template saved successfully');
     } catch (error) {
