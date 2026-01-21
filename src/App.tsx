@@ -15,6 +15,7 @@ const JobDetail = lazy(() => import("./pages/JobDetail"));
 const AccountSettings = lazy(() => import("./pages/AccountSettings"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const History = lazy(() => import("./pages/History"));
+const Analytics = lazy(() => import("./pages/Analytics"));
 
 // Client Portal Pages
 const ClientAuth = lazy(() => import("./pages/ClientAuth"));
@@ -48,6 +49,7 @@ const App = () => (
               <Route path="/jobs/:jobId" element={<JobDetail />} />
               <Route path="/settings" element={<AccountSettings />} />
               <Route path="/history" element={<History />} />
+              <Route path="/analytics" element={<Analytics />} />
               
               {/* Client Portal Routes */}
               <Route path="/client/auth" element={<ClientAuth />} />
