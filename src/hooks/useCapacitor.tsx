@@ -3,6 +3,13 @@ import { Capacitor } from '@capacitor/core';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { PushNotifications, Token, PushNotificationSchema, ActionPerformed } from '@capacitor/push-notifications';
 import { StatusBar, Style } from '@capacitor/status-bar';
+import { Camera, CameraResultType, CameraSource, Photo, GalleryPhoto } from '@capacitor/camera';
+
+export interface CapturedPhoto {
+  webPath?: string;
+  path?: string;
+  format: string;
+}
 
 interface UseCapacitorReturn {
   isNative: boolean;
@@ -20,6 +27,9 @@ interface UseCapacitorReturn {
   // Push Notifications
   registerPushNotifications: () => Promise<string | null>;
   pushToken: string | null;
+  // Camera
+  takePhoto: () => Promise<CapturedPhoto | null>;
+  pickPhotos: (limit?: number) => Promise<CapturedPhoto[]>;
 }
 
 export function useCapacitor(): UseCapacitorReturn {
@@ -174,6 +184,54 @@ export function useCapacitor(): UseCapacitorReturn {
     };
   }, [isNative]);
 
+  // ============ CAMERA ============
+  const takePhoto = useCallback(async (): Promise<CapturedPhoto | null> => {
+    if (!isNative) {
+      console.log('Native camera not available on web');
+      return null;
+    }
+
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Camera,
+        saveToGallery: false,
+      });
+      return {
+        webPath: photo.webPath,
+        path: photo.path,
+        format: photo.format,
+      };
+    } catch (error) {
+      console.warn('Camera capture failed:', error);
+      return null;
+    }
+  }, [isNative]);
+
+  const pickPhotos = useCallback(async (limit: number = 10): Promise<CapturedPhoto[]> => {
+    if (!isNative) {
+      console.log('Native photo picker not available on web');
+      return [];
+    }
+
+    try {
+      const result = await Camera.pickImages({
+        quality: 90,
+        limit,
+      });
+      return result.photos.map((photo: GalleryPhoto) => ({
+        webPath: photo.webPath,
+        path: photo.path,
+        format: photo.format,
+      }));
+    } catch (error) {
+      console.warn('Photo picker failed:', error);
+      return [];
+    }
+  }, [isNative]);
+
   return {
     isNative,
     platform,
@@ -190,9 +248,13 @@ export function useCapacitor(): UseCapacitorReturn {
     // Push Notifications
     registerPushNotifications,
     pushToken,
+    // Camera
+    takePhoto,
+    pickPhotos,
   };
 }
 
 // Re-export types for convenience
 export { ImpactStyle, NotificationType } from '@capacitor/haptics';
 export { Style as StatusBarStyle } from '@capacitor/status-bar';
+export { CameraResultType, CameraSource } from '@capacitor/camera';

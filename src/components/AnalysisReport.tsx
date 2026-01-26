@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { generatePDF } from '@/lib/pdfGenerator';
+import { useCapacitor, ImpactStyle } from '@/hooks/useCapacitor';
 
 interface ImageAnnotation {
   label: string;
@@ -55,6 +56,9 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
   const [longPressMarker, setLongPressMarker] = useState<{ photoIndex: number; annIndex: number } | null>(null);
   const imageRefs = useRef<(HTMLDivElement | null)[]>([]);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Capacitor haptics for native feedback
+  const { hapticImpact, isNative } = useCapacitor();
 
   // Sync local state when props change
   React.useEffect(() => {
@@ -147,8 +151,10 @@ const AnalysisReport: React.FC<AnalysisReportProps> = ({
     
     longPressTimerRef.current = setTimeout(() => {
       setLongPressMarker({ photoIndex, annIndex });
-      // Haptic feedback if available
-      if (navigator.vibrate) {
+      // Use Capacitor haptics for native, fallback to navigator.vibrate for web
+      if (isNative) {
+        hapticImpact(ImpactStyle.Medium);
+      } else if (navigator.vibrate) {
         navigator.vibrate(50);
       }
     }, 500); // 500ms long press

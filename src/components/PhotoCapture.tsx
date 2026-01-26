@@ -1,6 +1,8 @@
 import React, { useRef } from 'react';
 import { Camera, X, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useCapacitor } from '@/hooks/useCapacitor';
+import { toast } from 'sonner';
 
 interface PhotoCaptureProps {
   photos: File[];
@@ -14,6 +16,7 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
   maxPhotos = 10 
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { isNative, takePhoto, pickPhotos, hapticSelection } = useCapacitor();
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -27,13 +30,74 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
     }
   };
 
+  // Convert native photo URI to File object
+  const uriToFile = async (uri: string, filename: string): Promise<File | null> => {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      return new File([blob], filename, { type: blob.type || 'image/jpeg' });
+    } catch (error) {
+      console.error('Failed to convert URI to File:', error);
+      return null;
+    }
+  };
+
+  // Handle native camera capture
+  const handleNativeCamera = async () => {
+    const photo = await takePhoto();
+    if (photo?.webPath) {
+      hapticSelection();
+      const file = await uriToFile(photo.webPath, `photo_${Date.now()}.${photo.format || 'jpg'}`);
+      if (file) {
+        onPhotosChange([...photos, file]);
+      }
+    }
+  };
+
+  // Handle native photo picker
+  const handleNativePicker = async () => {
+    const remainingSlots = maxPhotos - photos.length;
+    const selectedPhotos = await pickPhotos(remainingSlots);
+    
+    if (selectedPhotos.length > 0) {
+      hapticSelection();
+      const files = await Promise.all(
+        selectedPhotos.map(async (photo, index) => {
+          if (photo.webPath) {
+            return uriToFile(photo.webPath, `photo_${Date.now()}_${index}.${photo.format || 'jpg'}`);
+          }
+          return null;
+        })
+      );
+      
+      const validFiles = files.filter((f): f is File => f !== null);
+      if (validFiles.length > 0) {
+        onPhotosChange([...photos, ...validFiles]);
+      }
+    }
+  };
+
   const removePhoto = (index: number) => {
     const newPhotos = photos.filter((_, i) => i !== index);
     onPhotosChange(newPhotos);
   };
 
   const openCamera = () => {
-    fileInputRef.current?.click();
+    if (isNative) {
+      // Show action sheet for native - camera or gallery
+      // For now, default to camera
+      handleNativeCamera();
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const openGallery = () => {
+    if (isNative) {
+      handleNativePicker();
+    } else {
+      fileInputRef.current?.click();
+    }
   };
 
   return (
@@ -43,16 +107,30 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
           Rug Photos ({photos.length}/{maxPhotos})
         </label>
         {photos.length < maxPhotos && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={openCamera}
-            className="gap-2"
-          >
-            <Camera className="h-4 w-4" />
-            Add Photo
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={openCamera}
+              className="gap-2"
+            >
+              <Camera className="h-4 w-4" />
+              {isNative ? 'Camera' : 'Add Photo'}
+            </Button>
+            {isNative && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openGallery}
+                className="gap-2"
+              >
+                <ImageIcon className="h-4 w-4" />
+                Gallery
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
@@ -77,7 +155,7 @@ const PhotoCapture: React.FC<PhotoCaptureProps> = ({
           <div className="text-center">
             <p className="text-sm font-medium text-foreground">Tap to add photos</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Capture or upload up to {maxPhotos} images
+              {isNative ? 'Take a photo or select from gallery' : `Capture or upload up to ${maxPhotos} images`}
             </p>
           </div>
         </div>
