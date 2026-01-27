@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Libre+Bodoni:wght@400;500;600;700&family=EB+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display:wght@400&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -111,21 +111,21 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'EB Garamond', Georgia, serif;
+    font-family: 'DM Sans', system-ui, sans-serif;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Libre Bodoni', 'Bodoni MT', serif;
+    font-family: 'DM Serif Display', Georgia, serif;
   }
 }
 
 @layer utilities {
   .font-display {
-    font-family: 'Libre Bodoni', 'Bodoni MT', serif;
+    font-family: 'DM Serif Display', Georgia, serif;
   }
   
   .font-body {
-    font-family: 'EB Garamond', Georgia, serif;
+    font-family: 'DM Sans', system-ui, sans-serif;
   }
   
   .gradient-warm {
