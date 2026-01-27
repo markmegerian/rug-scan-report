@@ -555,14 +555,14 @@ export const generateJobPDF = async (
   
   // Business name - large, centered, navy with letter spacing
   doc.setFontSize(28);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text(businessName.toUpperCase(), pageWidth / 2, yPos, { align: 'center' });
   yPos += 8;
   
   // Subtitle
   doc.setFontSize(11);
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   doc.setTextColor(...COLORS.teal);
   doc.text('RUGS & CARPET CLEANERS', pageWidth / 2, yPos, { align: 'center' });
   yPos += 8;
@@ -575,7 +575,7 @@ export const generateJobPDF = async (
   // Address with dot separator
   if (branding?.business_address || branding?.business_phone) {
     doc.setFontSize(9);
-    doc.setFont('times', 'normal');
+    doc.setFont(FONT.family, FONT.normal);
     doc.setTextColor(...COLORS.text);
     
     const addressParts = [];
@@ -605,25 +605,25 @@ export const generateJobPDF = async (
   
   // Left column - Estimate Number
   doc.setFontSize(9);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text('ESTIMATE NUMBER', margin, yPos);
   yPos += 6;
   
   doc.setFontSize(11);
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   doc.setTextColor(...COLORS.text);
   doc.text(job.job_number, margin, yPos);
   
   // Right column - Date Prepared
   const rightCol = margin + colWidth;
   doc.setFontSize(9);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text('DATE PREPARED', rightCol, yPos - 6);
   
   doc.setFontSize(11);
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   doc.setTextColor(...COLORS.text);
   doc.text(format(new Date(job.created_at), 'MMMM d, yyyy'), rightCol, yPos);
   
@@ -631,18 +631,18 @@ export const generateJobPDF = async (
   
   // Prepared For section
   doc.setFontSize(9);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text('PREPARED FOR', margin, yPos);
   yPos += 8;
   
   doc.setFontSize(11);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.text);
   doc.text(job.client_name, margin, yPos);
   yPos += 6;
   
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   if (job.client_phone) {
     doc.text(`Telephone: ${job.client_phone}`, margin, yPos);
     yPos += 5;
@@ -657,12 +657,12 @@ export const generateJobPDF = async (
   // Introduction letter
   const firstName = job.client_name.split(' ')[0];
   doc.setFontSize(10);
-  doc.setFont('times', 'italic');
+  doc.setFont(FONT.family, FONT.italic);
   doc.setTextColor(...COLORS.text);
   doc.text(`Dear ${firstName},`, margin, yPos);
   yPos += 10;
   
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   const introText = `We are honored to present this comprehensive estimate for the restoration and preservation of your distinguished collection of Oriental rugs. Our meticulous assessment has identified specialized treatments designed to restore the beauty, structural integrity, and longevity of each treasured piece.`;
   
   const introLines = doc.splitTextToSize(introText, contentWidth);
@@ -703,7 +703,7 @@ export const generateJobPDF = async (
     
     // Service name in teal with dash bullet
     doc.setFontSize(11);
-    doc.setFont('times', 'bold');
+    doc.setFont(FONT.family, FONT.bold);
     doc.setTextColor(...COLORS.teal);
     doc.text(`- ${service.name}`, margin, yPos);
     yPos += 7;
@@ -711,7 +711,7 @@ export const generateJobPDF = async (
     // Description
     if (service.description) {
       doc.setFontSize(9);
-      doc.setFont('times', 'normal');
+      doc.setFont(FONT.family, FONT.normal);
       doc.setTextColor(...COLORS.text);
       const descLines = doc.splitTextToSize(service.description, contentWidth - 5);
       descLines.forEach((line: string) => {
@@ -757,12 +757,12 @@ export const generateJobPDF = async (
     // Service items with dash and price
     for (const item of costs.items) {
       doc.setFontSize(9);
-      doc.setFont('times', 'normal');
+      doc.setFont(FONT.family, FONT.normal);
       doc.setTextColor(...COLORS.text);
       doc.text(`- ${item.service}`, margin + 8, yPos);
       
       // Price in gold, italic, right-aligned
-      doc.setFont('times', 'italic');
+      doc.setFont(FONT.family, FONT.italic);
       doc.setTextColor(...COLORS.gold);
       doc.text(`$${item.cost.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
       yPos += 5;
@@ -774,7 +774,7 @@ export const generateJobPDF = async (
     yPos += 6;
     
     doc.setFontSize(10);
-    doc.setFont('times', 'bold');
+    doc.setFont(FONT.family, FONT.bold);
     doc.setTextColor(...COLORS.navy);
     doc.text('Subtotal', margin + 8, yPos);
     
@@ -785,7 +785,7 @@ export const generateJobPDF = async (
     // Special note if present
     if (costs.specialNote) {
       doc.setFontSize(8);
-      doc.setFont('times', 'italic');
+      doc.setFont(FONT.family, FONT.italic);
       doc.setTextColor(...COLORS.textMuted);
       const noteLines = doc.splitTextToSize(`* ${costs.specialNote}`, contentWidth - 16);
       noteLines.forEach((line: string) => {
@@ -815,7 +815,7 @@ export const generateJobPDF = async (
   doc.roundedRect(margin, yPos - 4, contentWidth, 20, 3, 3, 'FD');
   
   doc.setFontSize(14);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text('TOTAL INVESTMENT', margin + 10, yPos + 8);
   
@@ -845,7 +845,7 @@ export const generateJobPDF = async (
     yPos += 8;
     
     doc.setFontSize(9);
-    doc.setFont('times', 'italic');
+    doc.setFont(FONT.family, FONT.italic);
     doc.setTextColor(...COLORS.text);
     const introText = `To maximize the longevity and preserve the beauty of your investment, we strongly recommend the following preventative treatments for your ${totalSqFt.toFixed(0)} square feet of fine rugs:`;
     const introLines = doc.splitTextToSize(introText, contentWidth);
@@ -867,19 +867,19 @@ export const generateJobPDF = async (
       
       // Service name in teal
       doc.setFontSize(10);
-      doc.setFont('times', 'bold');
+      doc.setFont(FONT.family, FONT.bold);
       doc.setTextColor(...COLORS.teal);
       doc.text(`- ${service.name}`, margin, yPos);
       
       // Price in gold, right-aligned
-      doc.setFont('times', 'bolditalic');
+      doc.setFont(FONT.family, FONT.boldItalic);
       doc.setTextColor(...COLORS.gold);
       doc.text(`$${servicePrice.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
       yPos += 6;
       
       // Service description with compelling text
       doc.setFontSize(9);
-      doc.setFont('times', 'normal');
+      doc.setFont(FONT.family, FONT.normal);
       doc.setTextColor(...COLORS.text);
       
       let description = service.description || '';
@@ -920,7 +920,7 @@ export const generateJobPDF = async (
   yPos += 8;
   
   doc.setFontSize(9);
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   doc.setTextColor(...COLORS.text);
   
   const nextStepsText = `These recommendations reflect our thorough professional assessment of your collection's condition. We understand the significant investment these distinguished pieces represent and remain committed to providing the highest caliber of care.
@@ -958,16 +958,16 @@ We invite you to proceed with all recommended services, or we would be pleased t
   yPos += 15;
   
   // Distinguished closing
-  doc.setFont('times', 'italic');
+  doc.setFont(FONT.family, FONT.italic);
   doc.text('With distinguished regards,', margin, yPos);
   yPos += 12;
   
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text(businessName.toUpperCase(), margin, yPos);
   yPos += 6;
   
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   doc.setTextColor(...COLORS.text);
   if (branding?.business_address) {
     doc.text(branding.business_address, margin, yPos);
@@ -980,7 +980,7 @@ We invite you to proceed with all recommended services, or we would be pleased t
   
   // Heritage tagline
   doc.setFontSize(8);
-  doc.setFont('times', 'italic');
+  doc.setFont(FONT.family, FONT.italic);
   doc.setTextColor(...COLORS.textMuted);
   doc.text('Heritage restoration specialists', pageWidth / 2, yPos, { align: 'center' });
   
@@ -1034,7 +1034,7 @@ We invite you to proceed with all recommended services, or we would be pleased t
     
     // Page number in footer
     doc.setFontSize(8);
-    doc.setFont('times', 'normal');
+    doc.setFont(FONT.family, FONT.normal);
     doc.setTextColor(...COLORS.textMuted);
     doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
   }
@@ -1068,13 +1068,13 @@ export const generateJobPDFBase64 = async (
   
   // Business header
   doc.setFontSize(28);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text(businessName.toUpperCase(), pageWidth / 2, yPos, { align: 'center' });
   yPos += 8;
   
   doc.setFontSize(11);
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   doc.setTextColor(...COLORS.teal);
   doc.text('RUGS & CARPET CLEANERS', pageWidth / 2, yPos, { align: 'center' });
   yPos += 8;
@@ -1105,14 +1105,14 @@ export const generateJobPDFBase64 = async (
   
   // Estimate info
   doc.setFontSize(9);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text('ESTIMATE NUMBER', margin, yPos);
   doc.text('DATE PREPARED', margin + contentWidth / 2, yPos);
   yPos += 6;
   
   doc.setFontSize(11);
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   doc.setTextColor(...COLORS.text);
   doc.text(job.job_number, margin, yPos);
   doc.text(format(new Date(job.created_at), 'MMMM d, yyyy'), margin + contentWidth / 2, yPos);
@@ -1120,18 +1120,18 @@ export const generateJobPDFBase64 = async (
   
   // Client info
   doc.setFontSize(9);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text('PREPARED FOR', margin, yPos);
   yPos += 8;
   
   doc.setFontSize(11);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.text);
   doc.text(job.client_name, margin, yPos);
   yPos += 6;
   
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   if (job.client_phone) {
     doc.text(`Telephone: ${job.client_phone}`, margin, yPos);
     yPos += 5;
@@ -1142,11 +1142,11 @@ export const generateJobPDFBase64 = async (
   // Intro
   const firstName = job.client_name.split(' ')[0];
   doc.setFontSize(10);
-  doc.setFont('times', 'italic');
+  doc.setFont(FONT.family, FONT.italic);
   doc.text(`Dear ${firstName},`, margin, yPos);
   yPos += 10;
   
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   const introText = `We are honored to present this comprehensive estimate for the restoration and preservation of your distinguished collection of Oriental rugs.`;
   const introLines = doc.splitTextToSize(introText, contentWidth);
   introLines.forEach((line: string) => {
@@ -1180,14 +1180,14 @@ export const generateJobPDFBase64 = async (
     }
     
     doc.setFontSize(11);
-    doc.setFont('times', 'bold');
+    doc.setFont(FONT.family, FONT.bold);
     doc.setTextColor(...COLORS.teal);
     doc.text(`- ${service.name}`, margin, yPos);
     yPos += 7;
     
     if (service.description) {
       doc.setFontSize(9);
-      doc.setFont('times', 'normal');
+      doc.setFont(FONT.family, FONT.normal);
       doc.setTextColor(...COLORS.text);
       const descLines = doc.splitTextToSize(service.description, contentWidth - 5);
       descLines.forEach((line: string) => {
@@ -1224,11 +1224,11 @@ export const generateJobPDFBase64 = async (
     
     for (const item of costs.items) {
       doc.setFontSize(9);
-      doc.setFont('times', 'normal');
+      doc.setFont(FONT.family, FONT.normal);
       doc.setTextColor(...COLORS.text);
       doc.text(`- ${item.service}`, margin + 8, yPos);
       
-      doc.setFont('times', 'italic');
+      doc.setFont(FONT.family, FONT.italic);
       doc.setTextColor(...COLORS.gold);
       doc.text(`$${item.cost.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
       yPos += 5;
@@ -1239,7 +1239,7 @@ export const generateJobPDFBase64 = async (
     yPos += 6;
     
     doc.setFontSize(10);
-    doc.setFont('times', 'bold');
+    doc.setFont(FONT.family, FONT.bold);
     doc.setTextColor(...COLORS.navy);
     doc.text('Subtotal', margin + 8, yPos);
     doc.setTextColor(...COLORS.gold);
@@ -1248,7 +1248,7 @@ export const generateJobPDFBase64 = async (
     
     if (costs.specialNote) {
       doc.setFontSize(8);
-      doc.setFont('times', 'italic');
+      doc.setFont(FONT.family, FONT.italic);
       doc.setTextColor(...COLORS.textMuted);
       doc.text(`* ${costs.specialNote}`, margin + 8, yPos);
       yPos += 4;
@@ -1273,7 +1273,7 @@ export const generateJobPDFBase64 = async (
   doc.roundedRect(margin, yPos - 4, contentWidth, 20, 3, 3, 'FD');
   
   doc.setFontSize(14);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text('TOTAL INVESTMENT', margin + 10, yPos + 8);
   doc.setTextColor(...COLORS.gold);
@@ -1286,12 +1286,12 @@ export const generateJobPDFBase64 = async (
   yPos += 15;
   
   doc.setFontSize(10);
-  doc.setFont('times', 'italic');
+  doc.setFont(FONT.family, FONT.italic);
   doc.setTextColor(...COLORS.text);
   doc.text('With distinguished regards,', margin, yPos);
   yPos += 12;
   
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text(businessName.toUpperCase(), margin, yPos);
   
@@ -1333,7 +1333,7 @@ export const generateJobPDFBase64 = async (
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
-    doc.setFont('times', 'normal');
+    doc.setFont(FONT.family, FONT.normal);
     doc.setTextColor(...COLORS.textMuted);
     doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
   }
@@ -1363,13 +1363,13 @@ export const generatePDF = async (
   
   // Header
   doc.setFontSize(28);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text(businessName.toUpperCase(), pageWidth / 2, yPos, { align: 'center' });
   yPos += 8;
   
   doc.setFontSize(11);
-  doc.setFont('times', 'normal');
+  doc.setFont(FONT.family, FONT.normal);
   doc.setTextColor(...COLORS.teal);
   doc.text('RUGS & CARPET CLEANERS', pageWidth / 2, yPos, { align: 'center' });
   yPos += 15;
@@ -1382,13 +1382,13 @@ export const generatePDF = async (
   
   // Rug info
   doc.setFontSize(11);
-  doc.setFont('times', 'bold');
+  doc.setFont(FONT.family, FONT.bold);
   doc.setTextColor(...COLORS.navy);
   doc.text(`Rug #${rug.rug_number}: ${rug.rug_type}`, margin, yPos);
   yPos += 6;
   
   if (rug.length && rug.width) {
-    doc.setFont('times', 'normal');
+    doc.setFont(FONT.family, FONT.normal);
     doc.setTextColor(...COLORS.text);
     doc.text(`Dimensions: ${rug.length}' x ${rug.width}'`, margin, yPos);
     yPos += 10;
@@ -1397,7 +1397,7 @@ export const generatePDF = async (
   // Report content
   if (rug.analysis_report) {
     doc.setFontSize(9);
-    doc.setFont('times', 'normal');
+    doc.setFont(FONT.family, FONT.normal);
     const reportLines = doc.splitTextToSize(rug.analysis_report, contentWidth);
     
     for (const line of reportLines) {
@@ -1428,7 +1428,7 @@ export const generatePDF = async (
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
-    doc.setFont('times', 'normal');
+    doc.setFont(FONT.family, FONT.normal);
     doc.setTextColor(...COLORS.textMuted);
     doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
   }

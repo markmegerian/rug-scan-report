@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Plus, Trash2, Save, Check, Edit2, DollarSign, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Plus, Trash2, Save, Check, Edit2, DollarSign, Loader2, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import TeachAIDialog from './TeachAIDialog';
 import {
   Select,
   SelectContent,
@@ -66,16 +67,28 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showTeachAI, setShowTeachAI] = useState(false);
+  const [pendingFeedback, setPendingFeedback] = useState<{
+    originalService: string;
+    originalPrice: number;
+    correctedService: string;
+    correctedPrice: number;
+  } | null>(null);
+  
+  // Track original AI-parsed values for comparison
+  const originalServicesRef = useRef<ServiceItem[]>([]);
 
   // Load existing approved estimate or parse from report
   useEffect(() => {
     if (existingApprovedEstimate && existingApprovedEstimate.services.length > 0) {
       // Use existing approved services
       setServices(existingApprovedEstimate.services);
+      originalServicesRef.current = existingApprovedEstimate.services;
     } else {
       // Parse from AI report
       const extractedServices = parseReportForServices(report);
       setServices(extractedServices);
+      originalServicesRef.current = extractedServices;
     }
   }, [report, existingApprovedEstimate]);
 
@@ -243,8 +256,34 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
   };
 
   const handleUpdateService = (id: string, updates: Partial<ServiceItem>) => {
+    const originalService = originalServicesRef.current.find(s => s.id === id);
+    
     setServices(prev => 
-      prev.map(s => s.id === id ? { ...s, ...updates } : s)
+      prev.map(s => {
+        if (s.id !== id) return s;
+        const updated = { ...s, ...updates };
+        
+        // Check for significant changes that warrant teaching the AI
+        if (originalService) {
+          const priceChange = Math.abs(updated.unitPrice - originalService.unitPrice);
+          const pricePctChange = originalService.unitPrice > 0 
+            ? priceChange / originalService.unitPrice 
+            : (updated.unitPrice > 0 ? 1 : 0);
+          const nameChanged = updated.name.toLowerCase() !== originalService.name.toLowerCase();
+          
+          // If >20% price change or name changed, prompt for feedback
+          if (pricePctChange > 0.2 || nameChanged) {
+            setPendingFeedback({
+              originalService: originalService.name,
+              originalPrice: originalService.unitPrice,
+              correctedService: updated.name,
+              correctedPrice: updated.unitPrice,
+            });
+          }
+        }
+        
+        return updated;
+      })
     );
   };
 
@@ -530,6 +569,41 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
         </CardContent>
       </Card>
 
+      {/* Pending Feedback Banner */}
+      {pendingFeedback && (
+        <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/30">
+          <CardContent className="flex items-center justify-between py-4">
+            <div className="flex items-center gap-3">
+              <Lightbulb className="h-5 w-5 text-amber-600" />
+              <div>
+                <p className="font-medium text-amber-800 dark:text-amber-200">Help improve AI accuracy</p>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  You made significant changes. Would you like to teach the AI?
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPendingFeedback(null)}
+              >
+                Dismiss
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setShowTeachAI(true)}
+                className="gap-1"
+              >
+                <Lightbulb className="h-4 w-4" />
+                Teach AI
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-3">
         <Button 
@@ -560,6 +634,21 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
           )}
         </Button>
       </div>
+
+      {/* Teach AI Dialog */}
+      <TeachAIDialog
+        open={showTeachAI}
+        onOpenChange={(open) => {
+          setShowTeachAI(open);
+          if (!open) setPendingFeedback(null);
+        }}
+        inspectionId={inspectionId}
+        rugType={rugInfo.rugType}
+        originalServiceName={pendingFeedback?.originalService}
+        originalPrice={pendingFeedback?.originalPrice}
+        correctedServiceName={pendingFeedback?.correctedService}
+        correctedPrice={pendingFeedback?.correctedPrice}
+      />
     </div>
   );
 };
