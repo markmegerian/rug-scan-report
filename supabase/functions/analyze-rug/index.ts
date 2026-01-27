@@ -349,6 +349,9 @@ serve(async (req) => {
     let businessPhone = "";
     let businessAddress = "";
     
+    // AI Learning: feedback context to improve future analyses
+    let feedbackContext = "";
+    
     try {
       const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -384,6 +387,34 @@ serve(async (req) => {
         businessPhone = profile.business_phone || "";
         businessAddress = profile.business_address || "";
         console.log("Loaded business info for user:", effectiveUserId, businessName);
+      }
+
+      // Fetch recent AI feedback corrections for this user (AI Learning System)
+      const { data: recentFeedback, error: feedbackError } = await supabase
+        .from("ai_analysis_feedback")
+        .select("*")
+        .eq("user_id", effectiveUserId)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (!feedbackError && recentFeedback && recentFeedback.length > 0) {
+        feedbackContext = "\n\nLEARNED CORRECTIONS (apply these patterns to improve accuracy):\n";
+        for (const fb of recentFeedback) {
+          if (fb.feedback_type === "price_correction" && fb.original_service_name && fb.corrected_price) {
+            feedbackContext += `- ${fb.original_service_name}: was $${fb.original_price}, should be $${fb.corrected_price}`;
+            if (fb.rug_type) feedbackContext += ` (for ${fb.rug_type} rugs)`;
+            feedbackContext += "\n";
+          } else if (fb.feedback_type === "service_correction" && fb.original_service_name && fb.corrected_service_name) {
+            feedbackContext += `- Service "${fb.original_service_name}" should be called "${fb.corrected_service_name}"\n`;
+          } else if (fb.feedback_type === "identification_error" && fb.original_rug_identification && fb.corrected_identification) {
+            feedbackContext += `- Rug identification: Was "${fb.original_rug_identification}", actually "${fb.corrected_identification}"\n`;
+          } else if (fb.feedback_type === "missed_issue" && fb.notes) {
+            feedbackContext += `- Previously missed issue: ${fb.notes}\n`;
+          } else if (fb.feedback_type === "false_positive" && fb.original_service_name) {
+            feedbackContext += `- "${fb.original_service_name}" was incorrectly recommended - be more careful with this\n`;
+          }
+        }
+        console.log(`Loaded ${recentFeedback.length} AI feedback corrections for user:`, effectiveUserId);
       }
     } catch (priceError) {
       console.error("Error fetching user data:", priceError);
@@ -439,7 +470,7 @@ Please examine the attached ${photos.length} photograph(s) and write a professio
         messages: [
           {
             role: "system",
-            content: getSystemPrompt(businessName, businessPhone, businessAddress),
+            content: getSystemPrompt(businessName, businessPhone, businessAddress) + feedbackContext,
           },
           {
             role: "user",

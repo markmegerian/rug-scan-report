@@ -1130,6 +1130,7 @@ const JobDetail = () => {
                   ? imageAnnotations 
                   : (Array.isArray(selectedRug.image_annotations) ? selectedRug.image_annotations : [])
               }
+              approvedEstimate={approvedEstimates.find(ae => ae.inspection_id === selectedRug.id) || null}
               onNewInspection={() => setShowReport(false)}
               onReviewEstimate={() => {
                 setShowReport(false);
@@ -1320,6 +1321,17 @@ const JobDetail = () => {
               payments={payments}
               jobNumber={job.job_number}
               clientName={job.client_name}
+              branding={branding}
+              rugs={approvedEstimates.map(ae => {
+                const rug = rugs.find(r => r.id === ae.inspection_id);
+                return {
+                  rugNumber: rug?.rug_number || 'Unknown',
+                  rugType: rug?.rug_type || 'Unknown',
+                  dimensions: rug?.length && rug?.width ? `${rug.length}' × ${rug.width}'` : 'N/A',
+                  services: ae.services,
+                  total: ae.total_amount,
+                };
+              })}
             />
           </div>
         )}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   CreditCard, Clock, CheckCircle, AlertCircle, 
-  Download, FileText, ExternalLink, Receipt
+  Download, FileText, ExternalLink, Receipt, Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,22 @@ import {
 } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+
+interface SelectedService {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+interface RugDetail {
+  rugNumber: string;
+  rugType: string;
+  dimensions: string;
+  services: SelectedService[];
+  total: number;
+}
 
 interface Payment {
   id: string;
@@ -30,10 +46,20 @@ interface Payment {
   metadata: any;
 }
 
+interface BusinessBranding {
+  business_name?: string | null;
+  business_address?: string | null;
+  business_phone?: string | null;
+  business_email?: string | null;
+  logo_url?: string | null;
+}
+
 interface PaymentTrackingProps {
   payments: Payment[];
   jobNumber: string;
   clientName: string;
+  branding?: BusinessBranding | null;
+  rugs?: RugDetail[];
   onGenerateInvoice?: (paymentId: string) => void;
 }
 
@@ -64,6 +90,8 @@ const PaymentTracking: React.FC<PaymentTrackingProps> = ({
   payments, 
   jobNumber, 
   clientName,
+  branding,
+  rugs,
   onGenerateInvoice 
 }) => {
   const [generatingInvoice, setGeneratingInvoice] = useState<string | null>(null);
@@ -84,8 +112,65 @@ const PaymentTracking: React.FC<PaymentTrackingProps> = ({
       } finally {
         setGeneratingInvoice(null);
       }
-    } else {
-      toast.info('Invoice generation coming soon');
+      return;
+    }
+
+    // Call the generate-invoice-pdf edge function directly
+    if (!payment.paid_at) {
+      toast.error('Invoice can only be generated for completed payments');
+      return;
+    }
+
+    setGeneratingInvoice(payment.id);
+    try {
+      // Build rug details for the invoice
+      const rugDetails: RugDetail[] = rugs?.map(rug => ({
+        rugNumber: rug.rugNumber,
+        rugType: rug.rugType,
+        dimensions: rug.dimensions,
+        services: (rug.services || []).map((s: any) => ({
+          id: s.id || s.name,
+          name: s.name,
+          quantity: s.quantity || 1,
+          unitPrice: s.unitPrice || s.price || 0,
+        })),
+        total: rug.total,
+      })) || [];
+
+      const { data, error } = await supabase.functions.invoke('generate-invoice-pdf', {
+        body: {
+          jobNumber,
+          clientName,
+          clientEmail: '', // We don't need this for download
+          amount: Math.round(payment.amount * 100), // Convert to cents
+          rugs: rugDetails,
+          businessName: branding?.business_name || undefined,
+          businessEmail: branding?.business_email || undefined,
+          businessPhone: branding?.business_phone || undefined,
+          businessAddress: branding?.business_address || undefined,
+          paidAt: payment.paid_at,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.pdfBase64) {
+        // Download the PDF
+        const link = document.createElement('a');
+        link.href = `data:application/pdf;base64,${data.pdfBase64}`;
+        link.download = `Invoice-${data.invoiceNumber || jobNumber}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success('Invoice downloaded successfully');
+      } else {
+        throw new Error('No PDF data received');
+      }
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      toast.error('Failed to generate invoice');
+    } finally {
+      setGeneratingInvoice(null);
     }
   };
 
@@ -203,7 +288,7 @@ const PaymentTracking: React.FC<PaymentTrackingProps> = ({
                             disabled={generatingInvoice === payment.id}
                           >
                             {generatingInvoice === payment.id ? (
-                              <Clock className="h-4 w-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                               <FileText className="h-4 w-4" />
                             )}
