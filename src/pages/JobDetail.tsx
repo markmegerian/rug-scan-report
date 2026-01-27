@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobDetail, useInvalidateJobDetail } from '@/hooks/useJobDetail';
+import { usePhotoUpload } from '@/hooks/usePhotoUpload';
 import type { Json } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +31,7 @@ import { ModelComparisonDialog } from '@/components/ModelComparisonDialog';
 import ClientPortalStatus from '@/components/ClientPortalStatus';
 import ServiceCompletionCard from '@/components/ServiceCompletionCard';
 import PaymentTracking from '@/components/PaymentTracking';
+import PhotoUploadProgress from '@/components/PhotoUploadProgress';
 import { JobDetailSkeleton } from '@/components/skeletons/JobDetailSkeleton';
 
 interface ClientPortalStatusData {
@@ -313,40 +315,13 @@ const JobDetail = () => {
     }
   };
 
-  const uploadPhotos = async (photos: File[]): Promise<string[]> => {
-    const uploadedUrls: string[] = [];
-    
-    for (const photo of photos) {
-      // Include user ID in path for user-scoped storage policies
-      const fileName = `${user!.id}/${Date.now()}-${Math.random().toString(36).substring(7)}-${photo.name}`;
-      
-      const { data, error } = await supabase.storage
-        .from('rug-photos')
-        .upload(fileName, photo, {
-          cacheControl: '3600',
-          upsert: false
-        });
-      
-      if (error) {
-        console.error('Upload error:', error);
-        throw new Error(`Failed to upload ${photo.name}`);
-      }
-      
-      // Use signed URL instead of public URL for private bucket
-      const { data: signedUrlData, error: urlError } = await supabase.storage
-        .from('rug-photos')
-        .createSignedUrl(data.path, 604800); // 7 days expiry
-      
-      if (urlError) {
-        console.error('Signed URL error:', urlError);
-        throw new Error(`Failed to get URL for ${photo.name}`);
-      }
-      
-      uploadedUrls.push(signedUrlData.signedUrl);
-    }
-    
-    return uploadedUrls;
-  };
+  // Parallel photo upload hook with progress tracking
+  const { 
+    uploadPhotos, 
+    progress: uploadProgress, 
+    isUploading: isUploadingPhotos,
+    reset: resetUploadProgress 
+  } = usePhotoUpload({ batchSize: 4 });
 
   const handleStatusChange = async (newStatus: string) => {
     if (!job) return;
@@ -440,10 +415,10 @@ const JobDetail = () => {
     if (!user || !job) return;
 
     setAddingRug(true);
+    resetUploadProgress();
     
     try {
-      toast.info('Uploading photos...');
-      const photoUrls = await uploadPhotos(photos);
+      const photoUrls = await uploadPhotos(photos, user.id);
 
       // Just save the rug without AI analysis
       const { error: insertError } = await supabase.from('inspections').insert({
@@ -469,6 +444,7 @@ const JobDetail = () => {
       toast.error(error instanceof Error ? error.message : 'Failed to add rug');
     } finally {
       setAddingRug(false);
+      resetUploadProgress();
     }
   };
 
@@ -1280,6 +1256,12 @@ const JobDetail = () => {
                     <DialogHeader>
                       <DialogTitle className="font-display text-xl">Add Rug to Job</DialogTitle>
                     </DialogHeader>
+                    {isUploadingPhotos && (
+                      <PhotoUploadProgress 
+                        progress={uploadProgress} 
+                        isUploading={isUploadingPhotos} 
+                      />
+                    )}
                     <RugForm
                       onSubmit={handleAddRug}
                       isLoading={addingRug}
