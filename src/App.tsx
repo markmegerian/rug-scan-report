@@ -42,6 +42,7 @@ const AdminAuditLog = lazy(() => import("./pages/admin/AdminAuditLog"));
 // Legal Pages
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
+const Support = lazy(() => import("./pages/Support"));
 
 // Loading fallback component - iOS safe area aware
 const PageLoader = () => (
@@ -60,7 +61,7 @@ const App = () => (
           <BrowserRouter>
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/" element={<Index />} />
+                <Route path="/" element={<Support />} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/jobs/new" element={<NewJob />} />
@@ -91,7 +92,9 @@ const App = () => (
                 
                 {/* Legal Routes */}
                 <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                <Route path="/privacy" element={<PrivacyPolicy />} />
                 <Route path="/terms-of-service" element={<TermsOfService />} />
+                <Route path="/support" element={<Support />} />
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
