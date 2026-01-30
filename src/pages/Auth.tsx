@@ -18,6 +18,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
 import rugboostLogo from '@/assets/rugboost-logo.svg';
+import RateLimitFeedback from '@/components/RateLimitFeedback';
+import { checkLoginAllowed, recordFailedAttempt, clearAttempts } from '@/lib/authRateLimiter';
 
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -43,6 +45,10 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
 
+  // Rate limiting state
+  const [rateLimitSeconds, setRateLimitSeconds] = useState(0);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+
   useEffect(() => {
     if (user && !loading) {
       navigate('/');
@@ -62,17 +68,34 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
       }
     }
 
+    // Check rate limiting
+    const { allowed, remainingSeconds, failedAttempts: attempts } = checkLoginAllowed(loginEmail);
+    if (!allowed) {
+      setRateLimitSeconds(remainingSeconds);
+      setFailedAttempts(attempts);
+      return;
+    }
+
     setIsSubmitting(true);
     const { error } = await signIn(loginEmail, loginPassword);
     setIsSubmitting(false);
 
     if (error) {
+      // Record failed attempt and apply rate limiting
+      const { lockoutSeconds, failedAttempts: newAttempts } = recordFailedAttempt(loginEmail);
+      if (lockoutSeconds > 0) {
+        setRateLimitSeconds(lockoutSeconds);
+        setFailedAttempts(newAttempts);
+      }
+      
       if (error.message.includes('Invalid login credentials')) {
         toast.error('Invalid email or password');
       } else {
         toast.error(error.message);
       }
     } else {
+      // Clear attempts on successful login
+      clearAttempts(loginEmail);
       toast.success('Welcome back!');
       navigate('/');
     }
@@ -186,6 +209,14 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
               </TabsList>
               
               <TabsContent value="login" className="mt-6">
+                {rateLimitSeconds > 0 && (
+                  <RateLimitFeedback
+                    remainingSeconds={rateLimitSeconds}
+                    failedAttempts={failedAttempts}
+                    onComplete={() => setRateLimitSeconds(0)}
+                    className="mb-4"
+                  />
+                )}
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="login-email">Email</Label>

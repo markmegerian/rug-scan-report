@@ -49,49 +49,80 @@ const AdminUsers = () => {
         .order('created_at', { ascending: false });
       if (profilesError) throw profilesError;
 
-      // For each profile, get job count, revenue, and payouts
-      const businessesWithMetrics: Business[] = await Promise.all(
-        (profiles || []).map(async (profile) => {
-          // Get jobs for this user
-          const { data: jobs } = await supabase
-            .from('jobs')
-            .select('id')
-            .eq('user_id', profile.user_id);
+      if (!profiles || profiles.length === 0) {
+        setBusinesses([]);
+        setLoading(false);
+        return;
+      }
 
-          const jobIds = jobs?.map(j => j.id) || [];
+      // Get all user IDs
+      const userIds = profiles.map(p => p.user_id);
 
-          // Get completed payments for this user's jobs
-          let totalRevenue = 0;
-          if (jobIds.length > 0) {
-            const { data: payments } = await supabase
-              .from('payments')
-              .select('amount')
-              .in('job_id', jobIds)
-              .eq('status', 'completed');
-            totalRevenue = payments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
-          }
+      // Fetch all jobs for these users in ONE query
+      const { data: allJobs } = await supabase
+        .from('jobs')
+        .select('id, user_id')
+        .in('user_id', userIds);
 
-          // Get completed payouts for this user
-          const { data: payouts } = await supabase
-            .from('payouts')
-            .select('amount')
-            .eq('user_id', profile.user_id)
-            .eq('status', 'completed');
-          const totalPaidOut = payouts?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
+      // Get all job IDs
+      const allJobIds = (allJobs || []).map(j => j.id);
 
-          return {
-            id: profile.id,
-            user_id: profile.user_id,
-            business_name: profile.business_name,
-            full_name: profile.full_name,
-            business_email: profile.business_email,
-            created_at: profile.created_at,
-            jobCount: jobs?.length || 0,
-            totalRevenue,
-            outstandingBalance: totalRevenue - totalPaidOut,
-          };
-        })
-      );
+      // Fetch all completed payments in ONE query
+      const { data: allPayments } = allJobIds.length > 0 
+        ? await supabase
+            .from('payments')
+            .select('job_id, amount')
+            .in('job_id', allJobIds)
+            .eq('status', 'completed')
+        : { data: [] };
+
+      // Fetch all completed payouts in ONE query
+      const { data: allPayouts } = await supabase
+        .from('payouts')
+        .select('user_id, amount')
+        .in('user_id', userIds)
+        .eq('status', 'completed');
+
+      // Create lookup maps
+      const jobsByUser = new Map<string, string[]>();
+      (allJobs || []).forEach(job => {
+        const jobs = jobsByUser.get(job.user_id) || [];
+        jobs.push(job.id);
+        jobsByUser.set(job.user_id, jobs);
+      });
+
+      const revenueByJob = new Map<string, number>();
+      (allPayments || []).forEach(payment => {
+        const current = revenueByJob.get(payment.job_id) || 0;
+        revenueByJob.set(payment.job_id, current + Number(payment.amount));
+      });
+
+      const payoutsByUser = new Map<string, number>();
+      (allPayouts || []).forEach(payout => {
+        const current = payoutsByUser.get(payout.user_id) || 0;
+        payoutsByUser.set(payout.user_id, current + Number(payout.amount));
+      });
+
+      // Build business metrics
+      const businessesWithMetrics: Business[] = profiles.map(profile => {
+        const userJobs = jobsByUser.get(profile.user_id) || [];
+        const totalRevenue = userJobs.reduce((sum, jobId) => {
+          return sum + (revenueByJob.get(jobId) || 0);
+        }, 0);
+        const totalPaidOut = payoutsByUser.get(profile.user_id) || 0;
+
+        return {
+          id: profile.id,
+          user_id: profile.user_id,
+          business_name: profile.business_name,
+          full_name: profile.full_name,
+          business_email: profile.business_email,
+          created_at: profile.created_at,
+          jobCount: userJobs.length,
+          totalRevenue,
+          outstandingBalance: totalRevenue - totalPaidOut,
+        };
+      });
 
       setBusinesses(businessesWithMetrics);
     } catch (error) {

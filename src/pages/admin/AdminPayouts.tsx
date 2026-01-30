@@ -8,11 +8,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { PlatformFeeSettings } from '@/components/admin/PlatformFeeSettings';
 import { useAuditLog } from '@/hooks/useAuditLog';
+import { useBatchSelection } from '@/hooks/useBatchSelection';
+import BatchActionBar from '@/components/BatchActionBar';
 import { toast } from 'sonner';
 
 interface Payout {
@@ -50,6 +53,20 @@ const AdminPayouts = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const { logAction } = useAuditLog();
+  
+  // Batch selection
+  const { 
+    selectedIds, 
+    isSelected, 
+    toggle, 
+    toggleAll, 
+    clearSelection, 
+    selectedCount,
+    isAllSelected,
+    isSomeSelected 
+  } = useBatchSelection<Payout>();
+  
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -66,23 +83,30 @@ const AdminPayouts = () => {
   const fetchPayouts = async () => {
     setLoading(true);
     try {
+      // Use a single query with nested select to avoid N+1
       const { data: payoutsData, error } = await supabase
         .from('payouts')
         .select('*')
         .order('created_at', { ascending: false });
+      
       if (error) throw error;
 
-      // Get business names for each payout
-      const payoutsWithBusiness: Payout[] = await Promise.all(
-        (payoutsData || []).map(async (payout) => {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('business_name, full_name')
-            .eq('user_id', payout.user_id)
-            .single();
-          return { ...payout, business: profile || undefined };
-        })
+      // Fetch all profiles in one query
+      const userIds = [...new Set((payoutsData || []).map(p => p.user_id))];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('user_id, business_name, full_name')
+        .in('user_id', userIds);
+
+      // Map profiles to payouts
+      const profileMap = new Map(
+        (profiles || []).map(p => [p.user_id, { business_name: p.business_name, full_name: p.full_name }])
       );
+
+      const payoutsWithBusiness: Payout[] = (payoutsData || []).map(payout => ({
+        ...payout,
+        business: profileMap.get(payout.user_id) || undefined
+      }));
 
       setPayouts(payoutsWithBusiness);
     } catch (error) {
@@ -99,8 +123,6 @@ const AdminPayouts = () => {
       });
       if (error) {
         console.error('Error sending notification:', error);
-      } else {
-        console.log(`Payout ${type} notification sent`);
       }
     } catch (err) {
       console.error('Error invoking notify-payout:', err);
@@ -117,7 +139,6 @@ const AdminPayouts = () => {
       if (error) throw error;
       toast.success('Payout marked as completed');
       
-      // Log the action
       logAction({
         action: 'payout_completed',
         entity_type: 'payout',
@@ -125,9 +146,7 @@ const AdminPayouts = () => {
         details: { status: 'completed' },
       });
       
-      // Send notification email
       sendPayoutNotification(payoutId, 'completed');
-      
       fetchPayouts();
     } catch (error) {
       console.error('Error updating payout:', error);
@@ -145,7 +164,6 @@ const AdminPayouts = () => {
       if (error) throw error;
       toast.success('Payout marked as failed');
       
-      // Log the action
       logAction({
         action: 'payout_failed',
         entity_type: 'payout',
@@ -160,6 +178,73 @@ const AdminPayouts = () => {
     }
   };
 
+  // Batch operations
+  const handleBatchComplete = async () => {
+    setIsBatchProcessing(true);
+    const ids = Array.from(selectedIds);
+    
+    try {
+      const { error } = await supabase
+        .from('payouts')
+        .update({ status: 'completed', paid_at: new Date().toISOString() })
+        .in('id', ids);
+
+      if (error) throw error;
+      
+      // Log each action
+      ids.forEach(id => {
+        logAction({
+          action: 'payout_completed',
+          entity_type: 'payout',
+          entity_id: id,
+          details: { status: 'completed', batch: true },
+        });
+        sendPayoutNotification(id, 'completed');
+      });
+      
+      toast.success(`${ids.length} payouts marked as completed`);
+      clearSelection();
+      fetchPayouts();
+    } catch (error) {
+      console.error('Error batch updating payouts:', error);
+      toast.error('Failed to update payouts');
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  const handleBatchFailed = async () => {
+    setIsBatchProcessing(true);
+    const ids = Array.from(selectedIds);
+    
+    try {
+      const { error } = await supabase
+        .from('payouts')
+        .update({ status: 'failed' })
+        .in('id', ids);
+
+      if (error) throw error;
+      
+      ids.forEach(id => {
+        logAction({
+          action: 'payout_failed',
+          entity_type: 'payout',
+          entity_id: id,
+          details: { status: 'failed', batch: true },
+        });
+      });
+      
+      toast.success(`${ids.length} payouts marked as failed`);
+      clearSelection();
+      fetchPayouts();
+    } catch (error) {
+      console.error('Error batch updating payouts:', error);
+      toast.error('Failed to update payouts');
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
   const filteredPayouts = payouts.filter((p) => {
     const matchesSearch =
       p.business?.business_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -170,6 +255,10 @@ const AdminPayouts = () => {
 
     return matchesSearch && matchesStatus;
   });
+
+  // Only pending payouts can be selected
+  const selectablePayouts = filteredPayouts.filter(p => p.status === 'pending');
+  const getId = (p: Payout) => p.id;
 
   const pendingTotal = payouts
     .filter((p) => p.status === 'pending')
@@ -191,10 +280,11 @@ const AdminPayouts = () => {
     <div className="min-h-screen bg-background">
       <AdminHeader title="Payouts" subtitle="Manage business payouts" />
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 pb-24">
         <div className="space-y-6">
           {/* Platform Fee Settings */}
           <PlatformFeeSettings />
+          
           {/* Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Card className="shadow-card">
@@ -285,6 +375,13 @@ const AdminPayouts = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-12">
+                          <Checkbox
+                            checked={isAllSelected(selectablePayouts, getId)}
+                            onCheckedChange={() => toggleAll(selectablePayouts, getId)}
+                            aria-label="Select all pending payouts"
+                          />
+                        </TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Business</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
@@ -296,7 +393,18 @@ const AdminPayouts = () => {
                     </TableHeader>
                     <TableBody>
                       {filteredPayouts.map((payout) => (
-                        <TableRow key={payout.id}>
+                        <TableRow key={payout.id} className={isSelected(payout.id) ? 'bg-muted/50' : ''}>
+                          <TableCell>
+                            {payout.status === 'pending' ? (
+                              <Checkbox
+                                checked={isSelected(payout.id)}
+                                onCheckedChange={() => toggle(payout.id)}
+                                aria-label={`Select payout for ${payout.business?.business_name || 'Unknown'}`}
+                              />
+                            ) : (
+                              <div className="w-4" />
+                            )}
+                          </TableCell>
                           <TableCell>
                             {format(new Date(payout.created_at), 'MMM d, yyyy')}
                           </TableCell>
@@ -371,6 +479,29 @@ const AdminPayouts = () => {
           </Card>
         </div>
       </main>
+
+      {/* Batch Action Bar */}
+      <BatchActionBar
+        selectedCount={selectedCount}
+        onClear={clearSelection}
+        actions={[
+          {
+            label: 'Mark Complete',
+            icon: <CheckCircle className="h-4 w-4" />,
+            onClick: handleBatchComplete,
+            className: 'text-green-600 border-green-500 hover:bg-green-50',
+            loading: isBatchProcessing,
+          },
+          {
+            label: 'Mark Failed',
+            icon: <XCircle className="h-4 w-4" />,
+            onClick: handleBatchFailed,
+            variant: 'outline',
+            className: 'text-red-600 border-red-500 hover:bg-red-50',
+            loading: isBatchProcessing,
+          },
+        ]}
+      />
     </div>
   );
 };
