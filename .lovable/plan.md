@@ -1,304 +1,83 @@
 
-# Comprehensive App Improvements Plan
+# Fix: Photos Not Displaying Due to Expired Signed URLs
 
-**Status: ✅ COMPLETED**
+## Summary
+Rug photos are failing to load because the app stores time-limited signed URLs (7-day expiry) in the database instead of file paths. After 7 days, these URLs expire and photos stop displaying.
 
-All 9 priority improvements have been implemented successfully.
+## Root Cause
+The `usePhotoUpload.ts` hook generates signed URLs immediately after upload and stores those URLs in the database. When the URLs expire after 7 days, the images break.
 
----
-
-## Summary of All Improvements
-
-| # | Issue | Status | Category |
-|---|-------|--------|----------|
-| 1 | No Global Error Boundary | ✅ Done | Stability |
-| 2 | N+1 Query in AdminDashboard | ✅ Done | Performance |
-| 3 | N+1 Query in ClientDashboard | ✅ Done | Performance |
-| 4 | Missing "Forgot Password" flow | ✅ Done | Auth UX |
-| 5 | Notification preferences not saved to database | ✅ Done | Data Persistence |
-| 6 | Business logo URLs expire after 7 days | ✅ Done | Asset Management |
-| 7 | Mobile navigation hides key features | ✅ Done | Mobile UX |
-| 8 | No "unsaved changes" warning on forms | ✅ Done | Form UX |
-| 9 | Job/Rug form doesn't block navigation | ✅ Done | Form UX |
-| 10 | Offline support for mobile app | Low | Mobile (not implemented) |
-| 11 | Batch operations for admin | Low | Admin UX (not implemented) |
-| 12 | Rate limiting feedback to users | Low | Error Handling (not implemented) |
+## Solution Overview
+Apply the same fix that was used for business logos: store file paths instead of signed URLs, then generate fresh signed URLs on-demand when displaying images.
 
 ---
 
-## Phase 1: Critical Stability
+## Changes Required
 
-### 1. Add Global Error Boundary
+### 1. Update Photo Upload Hook
+**File:** `src/hooks/usePhotoUpload.ts`
 
-Create a React Error Boundary component that catches JavaScript errors and displays a friendly error screen instead of crashing the entire app.
+- Modify `uploadSinglePhoto` to return the **storage file path** instead of a signed URL
+- Remove the signed URL generation during upload
+- The returned path format will be: `{userId}/{timestamp}-{random}-{filename}`
 
-**New File: `src/components/ErrorBoundary.tsx`**
+### 2. Create Photo URL Component  
+**New File:** `src/components/RugPhoto.tsx`
 
+- Create a reusable component that takes a file path and generates a signed URL on-demand
+- Use the existing `useSignedUrl` hook pattern with automatic refresh
+- Handle loading states and error fallbacks gracefully
+
+### 3. Update AnalysisReport Photo Display
+**File:** `src/components/AnalysisReport.tsx`
+
+- Replace direct `<img src={url}>` with the new `<RugPhoto>` component
+- Pass file paths instead of expecting pre-signed URLs
+
+### 4. Update ClientPortal Photo Display  
+**File:** `src/pages/ClientPortal.tsx`
+
+- Replace direct `<img src={url}>` with the new `<RugPhoto>` component
+
+### 5. Update JobDetail Photo Count
+**File:** `src/pages/JobDetail.tsx`
+
+- The photo count display already works with array length (no change needed)
+
+### 6. Create Migration for Existing Data
+**Database Migration**
+
+- Create a migration script to extract file paths from existing signed URLs in the database
+- The path can be extracted from the URL between `/rug-photos/` and `?token=`
+
+---
+
+## Technical Details
+
+### New RugPhoto Component Pattern
 ```text
-- Class component using componentDidCatch lifecycle
-- Displays friendly error UI with "Try Again" button
-- Logs errors for debugging
-- Option to report error
++------------------+     +----------------+     +-------------+
+|  RugPhoto        | --> | useSignedUrl   | --> | Supabase    |
+|  (filePath prop) |     | (generates     |     | Storage     |
+|                  |     |  fresh URLs)   |     | (rug-photos)|
++------------------+     +----------------+     +-------------+
 ```
 
-**Update: `src/App.tsx`**
+### File Path Format
+- **Current (broken):** Full signed URL with expiring token
+- **New (correct):** `94db7bee-b556-45c3-81d6-376cc69bcf06/1769536018659-gdpcqvg-image.jpg`
 
-```text
-- Wrap the entire app in <ErrorBoundary>
-- Ensures no white screen of death on errors
-```
+### Backward Compatibility
+The migration will convert existing signed URLs to file paths, ensuring all existing photos continue to work after the fix.
 
 ---
 
-## Phase 2: Performance Fixes
+## Benefits
+1. Photos will never expire - URLs are generated fresh on each view
+2. Consistent with how business logos already work
+3. Reduces database storage (paths are shorter than full URLs)
+4. Improves security - tokens aren't stored long-term
 
-### 2. Fix N+1 Query in AdminDashboard
-
-**Current Problem (lines 137-161):**
-```typescript
-// Makes 20+ separate queries for 10 payments!
-const paymentsWithDetails = await Promise.all(
-  (recentPaymentsData || []).map(async (payment) => {
-    const { data: job } = await supabase.from('jobs')...
-    const { data: profile } = await supabase.from('profiles')...
-  })
-);
-```
-
-**Solution:**
-Use nested Supabase select to fetch all data in ONE query:
-
-```typescript
-const { data: recentPayments } = await supabase
-  .from('payments')
-  .select(`
-    id, amount, status, created_at,
-    jobs!inner (
-      job_number, 
-      client_name,
-      profiles!inner (business_name, full_name)
-    )
-  `)
-  .order('created_at', { ascending: false })
-  .limit(10);
-```
-
-### 3. Fix N+1 Query in ClientDashboard
-
-**Current Problem (lines 109-156):**
-```typescript
-// Makes 3 queries PER job!
-const jobsWithDetails = await Promise.all(
-  (accessData || []).map(async (access) => {
-    // Query 1: branding
-    const { data: brandingData } = await supabase.from('profiles')...
-    // Query 2: rug count  
-    const { count } = await supabase.from('inspections')...
-    // Query 3: estimates
-    const { data: estimatesData } = await supabase.from('approved_estimates')...
-  })
-);
-```
-
-**Solution:**
-Fetch all related data upfront:
-
-```typescript
-// Single query with nested selects
-const { data: accessData } = await supabase
-  .from('client_job_access')
-  .select(`
-    id, access_token, job_id,
-    jobs (
-      id, job_number, client_name, status, created_at, payment_status, user_id,
-      inspections (count),
-      approved_estimates (total_amount),
-      profiles!jobs_user_id_fkey (business_name, business_phone, business_email)
-    )
-  `)
-  .eq('client_id', clientAccount.id);
-```
-
----
-
-## Phase 3: Authentication Improvements
-
-### 4. Add "Forgot Password" Flow
-
-**Update: `src/pages/Auth.tsx`**
-
-Add a "Forgot Password?" link below the login form that:
-1. Opens a modal or navigates to reset page
-2. Accepts email input
-3. Calls `supabase.auth.resetPasswordForEmail()`
-4. Shows success message
-
-**New File: `src/pages/ResetPassword.tsx`**
-
-For handling the password reset callback (when user clicks email link).
-
-**Update: `src/App.tsx`**
-
-Add route: `<Route path="/reset-password" element={<ResetPassword />} />`
-
----
-
-## Phase 4: Data Persistence Fixes
-
-### 5. Save Notification Preferences to Database
-
-**Current Problem:**
-Notification toggles in AccountSettings only update local state - they're lost on refresh.
-
-**Solution:**
-
-Create database migration to add `notification_preferences` column to profiles table:
-
-```sql
-ALTER TABLE profiles 
-ADD COLUMN notification_preferences JSONB DEFAULT '{"emailReports": true, "jobUpdates": true, "marketingEmails": false}'::jsonb;
-```
-
-**Update: `src/pages/AccountSettings.tsx`**
-- Fetch preferences on load
-- Save to database when toggles change
-
-### 6. Fix Business Logo URL Expiration
-
-**Current Problem (line 145):**
-```typescript
-.createSignedUrl(filePath, 604800); // 7 days - then breaks!
-```
-
-**Solutions (choose one):**
-- **Option A**: Regenerate signed URLs on each page load (adds latency)
-- **Option B**: Store file path instead of URL, generate signed URL on demand
-- **Option C**: Create an edge function that proxies storage requests
-
-**Recommended: Option B**
-- Store `logo_path` (just the file path) instead of `logo_url`
-- Create a helper hook `useSignedUrl(path)` that generates fresh URLs
-- URLs auto-refresh when needed
-
----
-
-## Phase 5: Mobile UX Improvements
-
-### 7. Add Mobile Navigation Menu
-
-**Current Problem:**
-History, Analytics, and A/R buttons are hidden on mobile (`hidden sm:flex`).
-
-**Solution:**
-Create a mobile-friendly hamburger menu or bottom tab bar.
-
-**New File: `src/components/MobileNav.tsx`**
-
-```text
-- Sheet/Drawer component that slides in from right
-- Contains all navigation links
-- Hamburger icon visible only on mobile
-```
-
-**Update: `src/pages/Dashboard.tsx`**
-- Add MobileNav component
-- Replace hidden buttons with mobile menu trigger on small screens
-
----
-
-## Phase 6: Form UX Improvements
-
-### 8 & 9. Add "Unsaved Changes" Warning
-
-**New File: `src/hooks/useUnsavedChanges.ts`**
-
-```typescript
-export const useUnsavedChanges = (hasChanges: boolean) => {
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasChanges) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasChanges]);
-};
-```
-
-**New Component: `src/components/UnsavedChangesDialog.tsx`**
-
-For in-app navigation blocking using React Router's `useBlocker`.
-
-**Update forms:**
-- `src/pages/NewJob.tsx`
-- `src/pages/AccountSettings.tsx`
-- `src/components/JobForm.tsx`
-- `src/components/RugForm.tsx`
-
----
-
-## Implementation Order
-
-The changes will be implemented in this sequence:
-
-1. **Error Boundary** - Prevents crashes (most critical)
-2. **AdminDashboard N+1 fix** - Major performance improvement
-3. **ClientDashboard N+1 fix** - Major performance improvement  
-4. **Forgot Password flow** - Common user need
-5. **Mobile Navigation** - Unlocks features for mobile users
-6. **Notification preferences persistence** - Data should be saved
-7. **Unsaved changes warning** - Prevents data loss
-8. **Logo URL fix** - Prevents broken images
-
----
-
-## Files to Create
-
-| File | Purpose |
-|------|---------|
-| `src/components/ErrorBoundary.tsx` | Catches JS errors gracefully |
-| `src/components/MobileNav.tsx` | Mobile navigation drawer |
-| `src/pages/ResetPassword.tsx` | Password reset callback page |
-| `src/hooks/useUnsavedChanges.ts` | Form change detection hook |
-| `src/hooks/useSignedUrl.ts` | Dynamic signed URL generation |
-| `src/components/UnsavedChangesDialog.tsx` | Navigation blocking dialog |
-
-## Files to Update
-
-| File | Changes |
-|------|---------|
-| `src/App.tsx` | Add ErrorBoundary wrapper, reset-password route |
-| `src/pages/Auth.tsx` | Add "Forgot Password?" link and modal |
-| `src/pages/admin/AdminDashboard.tsx` | Fix N+1 with nested select |
-| `src/pages/ClientDashboard.tsx` | Fix N+1 with nested select |
-| `src/pages/Dashboard.tsx` | Add mobile nav component |
-| `src/pages/AccountSettings.tsx` | Persist notification prefs, fix logo URLs |
-| `src/pages/NewJob.tsx` | Add unsaved changes warning |
-| `src/components/JobForm.tsx` | Track form dirty state |
-| `src/components/RugForm.tsx` | Track form dirty state |
-
-## Database Migration
-
-```sql
-ALTER TABLE profiles 
-ADD COLUMN IF NOT EXISTS notification_preferences JSONB 
-DEFAULT '{"emailReports": true, "jobUpdates": true, "marketingEmails": false}'::jsonb;
-```
-
----
-
-## Expected Improvements
-
-| Metric | Before | After |
-|--------|--------|-------|
-| AdminDashboard queries | 21+ queries | 6 queries |
-| ClientDashboard queries | 3N+3 queries | 2 queries |
-| App crash recovery | White screen | Friendly error UI |
-| Mobile feature access | 3 hidden features | Full access via menu |
-| Notification settings | Lost on refresh | Persisted |
-| Logo reliability | Breaks after 7 days | Always works |
-| Form data safety | Can lose edits | Warning before leaving |
-| Password recovery | Not possible | Email-based reset |
+## Estimated Impact
+- **New uploads:** Will work immediately after the fix
+- **Existing photos:** Will work after running the database migration
