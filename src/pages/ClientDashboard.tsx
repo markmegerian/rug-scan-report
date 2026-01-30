@@ -84,7 +84,7 @@ const ClientDashboard = () => {
         return;
       }
 
-      // Get all job access for this client
+      // Get all job access for this client with nested data (fixes N+1 query)
       const { data: accessData, error: accessError } = await supabase
         .from('client_job_access')
         .select(`
@@ -98,62 +98,55 @@ const ClientDashboard = () => {
             status,
             created_at,
             payment_status,
-            user_id
+            user_id,
+            inspections (id),
+            approved_estimates (total_amount),
+            profiles:user_id (
+              business_name,
+              business_phone,
+              business_email
+            )
           )
         `)
         .eq('client_id', clientAccount.id);
 
       if (accessError) throw accessError;
 
-      // Fetch rugs and estimates for each job
-      const jobsWithDetails = await Promise.all(
-        (accessData || [])
-          .filter(a => a.jobs)
-          .map(async (access) => {
-            const job = access.jobs as any;
+      // Process the nested data
+      const jobsWithDetails: ClientJob[] = (accessData || [])
+        .filter(a => a.jobs)
+        .map((access: any) => {
+          const job = access.jobs;
 
-            // Get branding from first job's owner
-            if (!branding) {
-              const { data: brandingData } = await supabase
-                .from('profiles')
-                .select('business_name, business_phone, business_email')
-                .eq('user_id', job.user_id)
-                .single();
+          // Set branding from the first job's owner
+          if (!branding && job.profiles) {
+            setBranding({
+              business_name: job.profiles.business_name,
+              business_phone: job.profiles.business_phone,
+              business_email: job.profiles.business_email,
+            });
+          }
 
-              if (brandingData) {
-                setBranding(brandingData);
-              }
-            }
+          // Calculate rug count from nested inspections
+          const rugCount = job.inspections?.length || 0;
 
-            // Get rug count
-            const { count } = await supabase
-              .from('inspections')
-              .select('id', { count: 'exact', head: true })
-              .eq('job_id', job.id);
+          // Calculate total amount from nested estimates
+          const totalAmount = (job.approved_estimates || []).reduce(
+            (sum: number, est: any) => sum + (est.total_amount || 0), 0
+          );
 
-            // Get approved estimates total
-            const { data: estimatesData } = await supabase
-              .from('approved_estimates')
-              .select('total_amount')
-              .eq('job_id', job.id);
-
-            const totalAmount = (estimatesData || []).reduce(
-              (sum, est) => sum + (est.total_amount || 0), 0
-            );
-
-            return {
-              id: job.id,
-              job_number: job.job_number,
-              client_name: job.client_name,
-              status: job.status,
-              created_at: job.created_at,
-              payment_status: job.payment_status,
-              rug_count: count || 0,
-              total_amount: totalAmount,
-              access_token: access.access_token,
-            };
-          })
-      );
+          return {
+            id: job.id,
+            job_number: job.job_number,
+            client_name: job.client_name,
+            status: job.status,
+            created_at: job.created_at,
+            payment_status: job.payment_status,
+            rug_count: rugCount,
+            total_amount: totalAmount,
+            access_token: access.access_token,
+          };
+        });
 
       // Sort by created_at descending
       jobsWithDetails.sort((a, b) => 

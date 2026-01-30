@@ -633,7 +633,9 @@ export type Database = {
           created_at: string
           full_name: string | null
           id: string
+          logo_path: string | null
           logo_url: string | null
+          notification_preferences: Json | null
           payment_method: string | null
           payment_notes: string | null
           paypal_email: string | null
@@ -653,7 +655,9 @@ export type Database = {
           created_at?: string
           full_name?: string | null
           id?: string
+          logo_path?: string | null
           logo_url?: string | null
+          notification_preferences?: Json | null
           payment_method?: string | null
           payment_notes?: string | null
           paypal_email?: string | null
@@ -673,7 +677,9 @@ export type Database = {
           created_at?: string
           full_name?: string | null
           id?: string
+          logo_path?: string | null
           logo_url?: string | null
+          notification_preferences?: Json | null
           payment_method?: string | null
           payment_notes?: string | null
           paypal_email?: string | null

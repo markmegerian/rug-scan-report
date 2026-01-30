@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ServicePricing from "@/components/ServicePricing";
 import EmailTemplatesSettings from "@/components/EmailTemplatesSettings";
 import PaymentInfoSettings from "@/components/PaymentInfoSettings";
+import { useSignedUrl } from "@/hooks/useSignedUrl";
 
 interface Profile {
   id: string;
@@ -25,6 +26,12 @@ interface Profile {
   business_phone: string | null;
   business_email: string | null;
   logo_url: string | null;
+  logo_path: string | null;
+  notification_preferences: {
+    emailReports: boolean;
+    jobUpdates: boolean;
+    marketingEmails: boolean;
+  } | null;
 }
 
 const AccountSettings = () => {
@@ -59,6 +66,10 @@ const AccountSettings = () => {
     jobUpdates: true,
     marketingEmails: false,
   });
+  const [savingNotifications, setSavingNotifications] = useState(false);
+
+  // Use the signed URL hook for logo display
+  const { signedUrl: logoSignedUrl } = useSignedUrl(profile?.logo_path);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -85,7 +96,7 @@ const AccountSettings = () => {
       }
 
       if (data) {
-        setProfile(data);
+        setProfile(data as unknown as Profile);
         setFormData({
           full_name: data.full_name || "",
           business_name: data.business_name || "",
@@ -93,6 +104,18 @@ const AccountSettings = () => {
           business_phone: data.business_phone || "",
           business_email: data.business_email || "",
         });
+        
+        // Load notification preferences from database
+        if (data.notification_preferences) {
+          const prefs = data.notification_preferences as Profile['notification_preferences'];
+          if (prefs) {
+            setNotifications({
+              emailReports: prefs.emailReports ?? true,
+              jobUpdates: prefs.jobUpdates ?? true,
+              marketingEmails: prefs.marketingEmails ?? false,
+            });
+          }
+        }
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -139,21 +162,15 @@ const AccountSettings = () => {
 
       if (uploadError) throw uploadError;
 
-      // Use signed URL instead of public URL for private bucket
-      const { data: signedUrlData, error: urlError } = await supabase.storage
-        .from("rug-photos")
-        .createSignedUrl(filePath, 604800); // 7 days expiry
-
-      if (urlError) throw urlError;
-
+      // Store the file path instead of signed URL (prevents expiration issues)
       const { error: updateError } = await supabase
         .from("profiles")
-        .update({ logo_url: signedUrlData.signedUrl })
+        .update({ logo_path: filePath })
         .eq("user_id", user!.id);
 
       if (updateError) throw updateError;
 
-      setProfile((prev) => prev ? { ...prev, logo_url: signedUrlData.signedUrl } : null);
+      setProfile((prev) => prev ? { ...prev, logo_path: filePath } : null);
       toast.success("Logo uploaded successfully");
     } catch (error) {
       console.error("Error uploading logo:", error);
@@ -241,16 +258,39 @@ const AccountSettings = () => {
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ logo_url: null })
+        .update({ logo_url: null, logo_path: null })
         .eq("user_id", user!.id);
 
       if (error) throw error;
 
-      setProfile((prev) => prev ? { ...prev, logo_url: null } : null);
+      setProfile((prev) => prev ? { ...prev, logo_url: null, logo_path: null } : null);
       toast.success("Logo removed");
     } catch (error) {
       console.error("Error removing logo:", error);
       toast.error("Failed to remove logo");
+    }
+  };
+
+  // Save notification preferences to database
+  const handleNotificationChange = async (key: keyof typeof notifications, value: boolean) => {
+    const newNotifications = { ...notifications, [key]: value };
+    setNotifications(newNotifications);
+    setSavingNotifications(true);
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ notification_preferences: newNotifications })
+        .eq("user_id", user!.id);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error("Error saving notification preferences:", error);
+      toast.error("Failed to save notification preferences");
+      // Revert on error
+      setNotifications(notifications);
+    } finally {
+      setSavingNotifications(false);
     }
   };
 
@@ -427,9 +467,8 @@ const AccountSettings = () => {
                 <Switch
                   id="emailReports"
                   checked={notifications.emailReports}
-                  onCheckedChange={(checked) =>
-                    setNotifications((prev) => ({ ...prev, emailReports: checked }))
-                  }
+                  disabled={savingNotifications}
+                  onCheckedChange={(checked) => handleNotificationChange('emailReports', checked)}
                 />
               </div>
               <Separator />
@@ -443,9 +482,8 @@ const AccountSettings = () => {
                 <Switch
                   id="jobUpdates"
                   checked={notifications.jobUpdates}
-                  onCheckedChange={(checked) =>
-                    setNotifications((prev) => ({ ...prev, jobUpdates: checked }))
-                  }
+                  disabled={savingNotifications}
+                  onCheckedChange={(checked) => handleNotificationChange('jobUpdates', checked)}
                 />
               </div>
               <Separator />
@@ -459,9 +497,8 @@ const AccountSettings = () => {
                 <Switch
                   id="marketingEmails"
                   checked={notifications.marketingEmails}
-                  onCheckedChange={(checked) =>
-                    setNotifications((prev) => ({ ...prev, marketingEmails: checked }))
-                  }
+                  disabled={savingNotifications}
+                  onCheckedChange={(checked) => handleNotificationChange('marketingEmails', checked)}
                 />
               </div>
             </CardContent>
@@ -490,7 +527,7 @@ const AccountSettings = () => {
                 <Label>Business Logo</Label>
                 <div className="flex items-center gap-4">
                   <Avatar className="h-20 w-20 rounded-lg">
-                    <AvatarImage src={profile?.logo_url || undefined} className="object-contain" />
+                    <AvatarImage src={logoSignedUrl || profile?.logo_url || undefined} className="object-contain" />
                     <AvatarFallback className="rounded-lg bg-muted">
                       <Building2 className="h-8 w-8 text-muted-foreground" />
                     </AvatarFallback>
@@ -515,7 +552,7 @@ const AccountSettings = () => {
                       )}
                       Upload Logo
                     </Button>
-                    {profile?.logo_url && (
+                    {(profile?.logo_url || profile?.logo_path) && (
                       <Button
                         variant="ghost"
                         size="sm"

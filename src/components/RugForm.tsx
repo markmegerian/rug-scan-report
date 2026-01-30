@@ -13,6 +13,8 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import GuidedPhotoCapture from './GuidedPhotoCapture';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import UnsavedChangesDialog from './UnsavedChangesDialog';
 
 const RUG_TYPES = [
   'Persian',
@@ -58,6 +60,12 @@ const RugForm: React.FC<RugFormProps> = ({ onSubmit, isLoading, rugIndex }) => {
     rugType: '',
     notes: '',
   });
+
+  // Track if form has been modified
+  const isDirty = formData.rugType !== '' || formData.notes !== '' || photos.length > 0;
+
+  // Handle unsaved changes warning
+  const { blocker, isBlocked } = useUnsavedChanges(isDirty);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -220,11 +228,18 @@ const RugForm: React.FC<RugFormProps> = ({ onSubmit, isLoading, rugIndex }) => {
           ) : (
             <>
               <Plus className="h-5 w-5" />
-              Add Rug to Job
+            Add Rug to Job
             </>
           )}
         </Button>
       </div>
+
+      {/* Unsaved Changes Dialog */}
+      <UnsavedChangesDialog
+        open={isBlocked}
+        onConfirm={() => blocker.proceed?.()}
+        onCancel={() => blocker.reset?.()}
+      />
     </form>
   );
 };

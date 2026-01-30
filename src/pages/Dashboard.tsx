@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import rugboostLogo from '@/assets/rugboost-logo.svg';
 import NotificationBell from '@/components/NotificationBell';
 import { JobListSkeleton } from '@/components/skeletons/JobListSkeleton';
+import MobileNav from '@/components/MobileNav';
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -116,7 +117,7 @@ const Dashboard = () => {
           <div className="flex items-center gap-2">
             <Button onClick={() => navigate('/jobs/new')} size="sm" className="gap-2">
               <Plus className="h-4 w-4" />
-              New Job
+              <span className="hidden xs:inline">New Job</span>
             </Button>
             <Button onClick={() => navigate('/history')} variant="outline" size="sm" className="gap-2 hidden sm:flex">
               <History className="h-4 w-4" />
@@ -130,17 +131,21 @@ const Dashboard = () => {
               <DollarSign className="h-4 w-4" />
               A/R
             </Button>
-            {isAdmin && <Button onClick={() => navigate('/admin')} variant="outline" size="sm" className="gap-2 hidden sm:flex">
+            {isAdmin && (
+              <Button onClick={() => navigate('/admin')} variant="outline" size="sm" className="gap-2 hidden sm:flex">
                 <Shield className="h-4 w-4" />
                 Admin
-              </Button>}
+              </Button>
+            )}
             <NotificationBell />
-            <Button onClick={() => navigate('/settings')} variant="ghost" size="icon">
+            <Button onClick={() => navigate('/settings')} variant="ghost" size="icon" className="hidden sm:flex">
               <Settings className="h-4 w-4" />
             </Button>
-            <Button onClick={handleSignOut} variant="ghost" size="icon">
+            <Button onClick={handleSignOut} variant="ghost" size="icon" className="hidden sm:flex">
               <LogOut className="h-4 w-4" />
             </Button>
+            {/* Mobile Navigation */}
+            <MobileNav isAdmin={isAdmin} onSignOut={handleSignOut} />
           </div>
         </div>
       </header>

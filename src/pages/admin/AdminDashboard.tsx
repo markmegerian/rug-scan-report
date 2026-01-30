@@ -125,40 +125,41 @@ const AdminDashboard = () => {
         completedPayouts,
       });
 
-      // Fetch recent payments with job info
+      // Fetch recent payments with job and business info using nested select (fixes N+1 query)
       const { data: recentPaymentsData, error: recentError } = await supabase
         .from('payments')
-        .select('id, amount, status, created_at, job_id')
+        .select(`
+          id, 
+          amount, 
+          status, 
+          created_at, 
+          job_id,
+          jobs (
+            job_number,
+            client_name,
+            user_id,
+            profiles:user_id (
+              business_name,
+              full_name
+            )
+          )
+        `)
         .order('created_at', { ascending: false })
         .limit(10);
       if (recentError) throw recentError;
 
-      // Get job details for each payment
-      const paymentsWithDetails: RecentPayment[] = await Promise.all(
-        (recentPaymentsData || []).map(async (payment) => {
-          const { data: job } = await supabase
-            .from('jobs')
-            .select('job_number, client_name, user_id')
-            .eq('id', payment.job_id)
-            .single();
-
-          let business = null;
-          if (job) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('business_name, full_name')
-              .eq('user_id', job.user_id)
-              .single();
-            business = profile;
-          }
-
-          return {
-            ...payment,
-            job: job ? { job_number: job.job_number, client_name: job.client_name } : null,
-            business,
-          };
-        })
-      );
+      // Transform the nested data to match our interface
+      const paymentsWithDetails: RecentPayment[] = (recentPaymentsData || []).map((payment: any) => ({
+        id: payment.id,
+        amount: payment.amount,
+        status: payment.status,
+        created_at: payment.created_at,
+        job: payment.jobs ? {
+          job_number: payment.jobs.job_number,
+          client_name: payment.jobs.client_name,
+        } : null,
+        business: payment.jobs?.profiles || null,
+      }));
 
       setRecentPayments(paymentsWithDetails);
     } catch (error) {

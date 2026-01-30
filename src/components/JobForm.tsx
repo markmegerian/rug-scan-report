@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import ClientSearch from './ClientSearch';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import UnsavedChangesDialog from './UnsavedChangesDialog';
 
 interface JobFormData {
   jobNumber: string;
@@ -31,15 +33,32 @@ const JobForm: React.FC<JobFormProps> = ({ onSubmit, isLoading, initialData, mod
     notes: initialData?.notes || '',
   });
 
+  // Track initial values for dirty state detection
+  const [initialValues, setInitialValues] = useState<JobFormData>({
+    jobNumber: initialData?.jobNumber || '',
+    clientName: initialData?.clientName || '',
+    clientEmail: initialData?.clientEmail || '',
+    clientPhone: initialData?.clientPhone || '',
+    notes: initialData?.notes || '',
+  });
+
+  // Check if form is dirty (has unsaved changes)
+  const isDirty = JSON.stringify(formData) !== JSON.stringify(initialValues);
+
+  // Handle unsaved changes warning
+  const { blocker, isBlocked } = useUnsavedChanges(isDirty);
+
   useEffect(() => {
     if (initialData) {
-      setFormData({
+      const newData = {
         jobNumber: initialData.jobNumber || '',
         clientName: initialData.clientName || '',
         clientEmail: initialData.clientEmail || '',
         clientPhone: initialData.clientPhone || '',
         notes: initialData.notes || '',
-      });
+      };
+      setFormData(newData);
+      setInitialValues(newData);
     }
   }, [initialData]);
 
@@ -68,6 +87,8 @@ const JobForm: React.FC<JobFormProps> = ({ onSubmit, isLoading, initialData, mod
     }
 
     await onSubmit(formData);
+    // Reset initial values after successful submit to clear dirty state
+    setInitialValues(formData);
   };
 
   return (
@@ -183,6 +204,13 @@ const JobForm: React.FC<JobFormProps> = ({ onSubmit, isLoading, initialData, mod
           }
         </Button>
       </div>
+
+      {/* Unsaved Changes Dialog */}
+      <UnsavedChangesDialog
+        open={isBlocked}
+        onConfirm={() => blocker.proceed?.()}
+        onCancel={() => blocker.reset?.()}
+      />
     </form>
   );
 };
