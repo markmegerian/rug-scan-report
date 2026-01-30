@@ -1,83 +1,67 @@
 
-# Fix: Photos Not Displaying Due to Expired Signed URLs
+# Fix: useBlocker Router Compatibility Error
 
-## ✅ COMPLETED
+## Problem
+The app crashes with the error: **"useBlocker must be used within a data router"**
 
-## Summary
-Rug photos and other storage assets were failing to load because the app stored time-limited signed URLs (7-day expiry) in the database instead of file paths. After 7 days, these URLs expired and photos stopped displaying.
+This happens because:
+- `useBlocker` from React Router v6 requires a **data router** (`createBrowserRouter`)
+- The app uses the simpler **component-based router** (`BrowserRouter`)
+- The `useUnsavedChanges` hook tries to use `useBlocker` which isn't supported
 
-## Root Cause
-The `usePhotoUpload.ts` hook generated signed URLs immediately after upload and stored those URLs in the database. When the URLs expired after 7 days, the images broke.
+## Solution
+Replace `useBlocker` with a custom implementation that works with `BrowserRouter`. This approach:
+- Keeps the existing routing structure intact (no app-wide migration)
+- Maintains the same user experience for unsaved changes warnings
+- Uses `useNavigate` and `useLocation` which work with any router
 
-## Solution Implemented
-Store file paths instead of signed URLs, then generate fresh signed URLs on-demand when displaying images. This pattern was already used for business logos and is now applied consistently across the system.
+## Files to Change
 
----
+### 1. Update useUnsavedChanges Hook
+**File:** `src/hooks/useUnsavedChanges.ts`
 
-## Changes Made
+Replace the `useBlocker` implementation with a custom navigation interception:
+- Track attempted navigation via a state variable
+- Intercept navigation by storing the target path
+- Show confirmation dialog before allowing navigation
+- Provide `confirmNavigation()` and `cancelNavigation()` functions
 
-### Phase 1: Core Photo Upload Fix
+### 2. Update JobForm Component
+**File:** `src/components/JobForm.tsx`
 
-#### 1. ✅ Updated Photo Upload Hook
-**File:** `src/hooks/usePhotoUpload.ts`
-- Modified `uploadSinglePhoto` to return the **storage file path** instead of a signed URL
-- Removed signed URL generation during upload
-- Path format: `{userId}/{timestamp}-{random}-{filename}`
+- Update the dialog callbacks to use the new hook API
+- Replace `blocker.proceed?.()` with `confirmNavigation()`
+- Replace `blocker.reset?.()` with `cancelNavigation()`
 
-#### 2. ✅ Created Photo URL Component  
-**New File:** `src/components/RugPhoto.tsx`
-- Reusable component that takes a file path and generates a signed URL on-demand
-- Uses the existing `useSignedUrl` hook with automatic refresh
-- Handles loading states and error fallbacks gracefully
-- Backward compatible: extracts file paths from legacy signed URLs
+### 3. Update RugForm Component  
+**File:** `src/components/RugForm.tsx`
 
-#### 3. ✅ Updated AnalysisReport Photo Display
-**File:** `src/components/AnalysisReport.tsx`
-- Replaced direct `<img src={url}>` with the new `<RugPhoto>` component
-
-#### 4. ✅ Updated ClientPortal Photo Display  
-**File:** `src/pages/ClientPortal.tsx`
-- Replaced direct `<img src={url}>` with the new `<RugPhoto>` component
-
-#### 5. ✅ Database Migration for Existing Data
-- Converted signed URLs (with `?token=`) to file paths
-- Converted public URLs (`/object/public/rug-photos/`) to file paths
+- Same updates as JobForm for the new hook API
 
 ---
 
-### Phase 2: System-Wide Audit & Fixes
+## Technical Details
 
-#### 6. ✅ Updated History Page
-**File:** `src/pages/History.tsx`
-- Added import for RugPhoto component
-- Replaced direct `<img>` tags for rug thumbnails with `<RugPhoto>`
+### New Hook API
 
-#### 7. ✅ Updated Client History Page
-**File:** `src/pages/ClientHistory.tsx`
-- Added import for RugPhoto component
-- Replaced direct `<img>` tags for rug thumbnails with `<RugPhoto>`
+The updated `useUnsavedChanges` hook will return:
+- `isBlocked: boolean` - Whether navigation is blocked
+- `pendingPath: string | null` - Where user tried to navigate
+- `confirmNavigation: () => void` - Proceed with blocked navigation
+- `cancelNavigation: () => void` - Cancel and stay on page
 
-#### 8. ✅ Updated Business Branding Interface
-**Files:** `src/hooks/useJobDetail.ts`, `src/lib/pdfGenerator.ts`
-- Changed `logo_url` to `logo_path` in BusinessBranding interface
-- Updated query to fetch `logo_path` instead of `logo_url`
-- PDF generator now uses `logo_path` (logo is not currently rendered in PDFs)
+### How It Works
 
----
+```text
+User clicks link → Hook intercepts → Shows dialog → User confirms/cancels
+         ↓                 ↓                              ↓
+    Check hasChanges    Store path               Navigate or stay
+```
 
-## Files Modified
-1. `src/hooks/usePhotoUpload.ts` - Returns paths instead of signed URLs
-2. `src/components/RugPhoto.tsx` - New component for on-demand URL generation
-3. `src/components/AnalysisReport.tsx` - Uses RugPhoto
-4. `src/pages/ClientPortal.tsx` - Uses RugPhoto
-5. `src/pages/History.tsx` - Uses RugPhoto for thumbnails
-6. `src/pages/ClientHistory.tsx` - Uses RugPhoto for thumbnails
-7. `src/hooks/useJobDetail.ts` - Updated branding interface to use logo_path
-8. `src/lib/pdfGenerator.ts` - Updated BusinessBranding interface
+The hook will use `window.history.pushState` interception to detect navigation attempts, store the intended destination, and only navigate when the user confirms.
 
-## Benefits Achieved
-1. Photos will never expire - URLs are generated fresh on each view
-2. Consistent pattern across all storage assets (rug photos, logos)
-3. Reduces database storage (paths are shorter than full URLs)
-4. Improves security - tokens aren't stored long-term
-5. Backward compatible with any remaining legacy URLs
+## Benefits
+1. Fixes the crash immediately
+2. No changes to app routing structure
+3. Same UX for users (dialog still appears)
+4. Browser refresh/close warning still works (beforeunload)
