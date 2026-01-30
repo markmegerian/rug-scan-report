@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Search, DollarSign, Loader2, CheckCircle, Clock, XCircle } from 'lucide-react';
@@ -16,6 +16,9 @@ import { PlatformFeeSettings } from '@/components/admin/PlatformFeeSettings';
 import { useAuditLog } from '@/hooks/useAuditLog';
 import { useBatchSelection } from '@/hooks/useBatchSelection';
 import BatchActionBar from '@/components/BatchActionBar';
+import PaginatedTable from '@/components/PaginatedTable';
+import ExportCsvButton from '@/components/ExportCsvButton';
+import { formatCurrencyCsv, formatDateCsv } from '@/lib/csvExport';
 import { toast } from 'sonner';
 
 interface Payout {
@@ -52,6 +55,8 @@ const AdminPayouts = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const { logAction } = useAuditLog();
   
   // Batch selection
@@ -245,19 +250,46 @@ const AdminPayouts = () => {
     }
   };
 
-  const filteredPayouts = payouts.filter((p) => {
-    const matchesSearch =
-      p.business?.business_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.business?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.reference_number?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredPayouts = useMemo(() => {
+    return payouts.filter((p) => {
+      const matchesSearch =
+        p.business?.business_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.business?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.reference_number?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
+      const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    });
+  }, [payouts, searchQuery, statusFilter]);
+
+  // Pagination
+  const paginatedPayouts = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredPayouts.slice(startIndex, startIndex + pageSize);
+  }, [filteredPayouts, currentPage, pageSize]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, statusFilter]);
+
+  // CSV export columns
+  const csvColumns = [
+    { key: 'created_at' as const, label: 'Date', formatter: (v: unknown) => formatDateCsv(String(v)) },
+    { key: 'business' as const, label: 'Business', formatter: (v: unknown) => {
+      const b = v as Payout['business'];
+      return b?.business_name || b?.full_name || '';
+    }},
+    { key: 'amount' as const, label: 'Amount', formatter: (v: unknown) => formatCurrencyCsv(Number(v)) },
+    { key: 'payment_method' as const, label: 'Method', formatter: (v: unknown) => String(v || '') },
+    { key: 'reference_number' as const, label: 'Reference', formatter: (v: unknown) => String(v || '') },
+    { key: 'status' as const, label: 'Status', formatter: (v: unknown) => String(v || '') },
+    { key: 'paid_at' as const, label: 'Paid At', formatter: (v: unknown) => v ? formatDateCsv(String(v)) : '' },
+  ];
 
   // Only pending payouts can be selected
-  const selectablePayouts = filteredPayouts.filter(p => p.status === 'pending');
+  const selectablePayouts = paginatedPayouts.filter(p => p.status === 'pending');
   const getId = (p: Payout) => p.id;
 
   const pendingTotal = payouts
@@ -351,7 +383,7 @@ const AdminPayouts = () => {
 
           {/* Payouts Table */}
           <Card className="shadow-medium">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="font-display text-lg flex items-center gap-2">
                 <DollarSign className="h-5 w-5 text-primary" />
                 Payouts
@@ -359,6 +391,11 @@ const AdminPayouts = () => {
                   ({filteredPayouts.length} total)
                 </span>
               </CardTitle>
+              <ExportCsvButton
+                data={filteredPayouts}
+                columns={csvColumns}
+                filename="payouts"
+              />
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -392,7 +429,7 @@ const AdminPayouts = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredPayouts.map((payout) => (
+                      {paginatedPayouts.map((payout) => (
                         <TableRow key={payout.id} className={isSelected(payout.id) ? 'bg-muted/50' : ''}>
                           <TableCell>
                             {payout.status === 'pending' ? (
@@ -475,6 +512,16 @@ const AdminPayouts = () => {
                   </Table>
                 </div>
               )}
+              <PaginatedTable
+                currentPage={currentPage}
+                totalItems={filteredPayouts.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setCurrentPage(1);
+                }}
+              />
             </CardContent>
           </Card>
         </div>

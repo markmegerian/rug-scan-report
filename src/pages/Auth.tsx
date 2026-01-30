@@ -229,6 +229,7 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
                         value={loginEmail}
                         onChange={(e) => setLoginEmail(e.target.value)}
                         className="pl-10"
+                        autoComplete="email"
                         required
                       />
                     </div>
@@ -244,6 +245,7 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
                         className="pl-10"
+                        autoComplete="current-password"
                         required
                       />
                     </div>
@@ -284,6 +286,7 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
                         value={signupName}
                         onChange={(e) => setSignupName(e.target.value)}
                         className="pl-10"
+                        autoComplete="name"
                         required
                       />
                     </div>
@@ -299,6 +302,7 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
                         value={signupEmail}
                         onChange={(e) => setSignupEmail(e.target.value)}
                         className="pl-10"
+                        autoComplete="email"
                         required
                       />
                     </div>
@@ -314,6 +318,7 @@ const Auth = forwardRef<HTMLDivElement>((_, ref) => {
                         value={signupPassword}
                         onChange={(e) => setSignupPassword(e.target.value)}
                         className="pl-10"
+                        autoComplete="new-password"
                         required
                       />
                     </div>

@@ -10,12 +10,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { ArrowLeft, Upload, Building2, Save, Loader2, Lock, Bell, Eye, EyeOff, Mail } from "lucide-react";
+import { ArrowLeft, Upload, Building2, Save, Loader2, Lock, Bell, Eye, EyeOff, Mail, Palette, AlertTriangle } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ServicePricing from "@/components/ServicePricing";
 import EmailTemplatesSettings from "@/components/EmailTemplatesSettings";
 import PaymentInfoSettings from "@/components/PaymentInfoSettings";
 import { useSignedUrl } from "@/hooks/useSignedUrl";
+import DarkModeToggle from "@/components/DarkModeToggle";
+import DeleteAccountDialog from "@/components/DeleteAccountDialog";
 
 interface Profile {
   id: string;
@@ -624,6 +626,54 @@ const AccountSettings = () => {
 
           {/* Email Templates */}
           <EmailTemplatesSettings />
+
+          {/* Appearance */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Palette className="h-5 w-5" />
+                Appearance
+              </CardTitle>
+              <CardDescription>
+                Customize how the app looks and feels
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Theme</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Choose between light, dark, or system theme
+                  </p>
+                </div>
+                <DarkModeToggle />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Danger Zone */}
+          <Card className="border-destructive/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+                Danger Zone
+              </CardTitle>
+              <CardDescription>
+                Irreversible actions that affect your account
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label className="text-destructive">Delete Account</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Permanently delete your account and all associated data
+                  </p>
+                </div>
+                <DeleteAccountDialog userEmail={user?.email || ''} />
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Save Button */}
           <div className="flex justify-end">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Users, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,6 +7,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { AdminHeader } from '@/components/admin/AdminHeader';
 import { BusinessTable } from '@/components/admin/BusinessTable';
+import PaginatedTable from '@/components/PaginatedTable';
+import ExportCsvButton from '@/components/ExportCsvButton';
+import { formatCurrencyCsv, formatDateCsv } from '@/lib/csvExport';
 
 interface Business {
   id: string;
@@ -26,6 +29,8 @@ const AdminUsers = () => {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -132,14 +137,36 @@ const AdminUsers = () => {
     }
   };
 
-  const filteredBusinesses = businesses.filter((b) => {
+  const filteredBusinesses = useMemo(() => {
     const searchLower = searchQuery.toLowerCase();
-    return (
+    return businesses.filter((b) =>
       b.business_name?.toLowerCase().includes(searchLower) ||
       b.full_name?.toLowerCase().includes(searchLower) ||
       b.business_email?.toLowerCase().includes(searchLower)
     );
-  });
+  }, [businesses, searchQuery]);
+
+  // Pagination
+  const paginatedBusinesses = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredBusinesses.slice(startIndex, startIndex + pageSize);
+  }, [filteredBusinesses, currentPage, pageSize]);
+
+  // Reset page when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  // CSV export columns
+  const csvColumns = [
+    { key: 'business_name' as const, label: 'Business Name', formatter: (v: unknown) => String(v || '') },
+    { key: 'full_name' as const, label: 'Owner Name', formatter: (v: unknown) => String(v || '') },
+    { key: 'business_email' as const, label: 'Email', formatter: (v: unknown) => String(v || '') },
+    { key: 'created_at' as const, label: 'Joined', formatter: (v: unknown) => formatDateCsv(String(v)) },
+    { key: 'jobCount' as const, label: 'Jobs', formatter: (v: unknown) => String(v || 0) },
+    { key: 'totalRevenue' as const, label: 'Total Revenue', formatter: (v: unknown) => formatCurrencyCsv(Number(v)) },
+    { key: 'outstandingBalance' as const, label: 'Balance Due', formatter: (v: unknown) => formatCurrencyCsv(Number(v)) },
+  ];
 
   if (authLoading) {
     return (
@@ -178,7 +205,7 @@ const AdminUsers = () => {
 
           {/* Businesses Table */}
           <Card className="shadow-medium">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="font-display text-lg flex items-center gap-2">
                 <Users className="h-5 w-5 text-primary" />
                 Businesses
@@ -186,9 +213,24 @@ const AdminUsers = () => {
                   ({filteredBusinesses.length} total)
                 </span>
               </CardTitle>
+              <ExportCsvButton
+                data={filteredBusinesses}
+                columns={csvColumns}
+                filename="businesses"
+              />
             </CardHeader>
             <CardContent>
-              <BusinessTable businesses={filteredBusinesses} loading={loading} />
+              <BusinessTable businesses={paginatedBusinesses} loading={loading} />
+              <PaginatedTable
+                currentPage={currentPage}
+                totalItems={filteredBusinesses.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setCurrentPage(1);
+                }}
+              />
             </CardContent>
           </Card>
         </div>
