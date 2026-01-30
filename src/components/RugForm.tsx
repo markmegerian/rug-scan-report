@@ -1,8 +1,8 @@
 /**
- * RugForm Component - v2.0.0
- * Updated: 2026-01-30 - Fixed navigation blocking
+ * RugForm Component - v3.0.0 CACHE BUSTER
+ * NO useBlocker - uses custom navigation blocking
  */
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Loader2, Plus, Hash, Ruler, Camera, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,10 @@ import { toast } from 'sonner';
 import GuidedPhotoCapture from './GuidedPhotoCapture';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import UnsavedChangesDialog from './UnsavedChangesDialog';
+
+// Runtime check - confirms fresh bundle
+const COMPONENT_BUILD_ID = 'RugForm_v3_' + Math.random().toString(36).slice(2, 8);
+console.debug(`[RugForm] Loaded: ${COMPONENT_BUILD_ID}`);
 
 const RUG_TYPES = [
   'Persian',
@@ -65,10 +69,15 @@ const RugForm: React.FC<RugFormProps> = ({ onSubmit, isLoading, rugIndex }) => {
     notes: '',
   });
 
+  // Log mount for debugging
+  useEffect(() => {
+    console.debug(`[RugForm] Mounted, build=${COMPONENT_BUILD_ID}`);
+  }, []);
+
   // Track if form has been modified
   const isDirty = formData.rugType !== '' || formData.notes !== '' || photos.length > 0;
 
-  // Handle unsaved changes warning - uses custom implementation (no useBlocker)
+  // Handle unsaved changes warning - custom implementation (NO useBlocker)
   const { isBlocked, confirmNavigation, cancelNavigation } = useUnsavedChanges(isDirty);
 
   const handleInputChange = (

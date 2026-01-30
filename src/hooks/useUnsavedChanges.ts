@@ -1,21 +1,33 @@
 /**
- * useUnsavedChanges Hook - v2.0.0
+ * useUnsavedChanges Hook - v3.0.0 CACHE BUSTER
  * 
- * Custom navigation blocking for BrowserRouter (no useBlocker dependency)
- * Last updated: 2026-01-30
+ * Custom navigation blocking for BrowserRouter (NO useBlocker - works without data router)
+ * Build ID: ${Date.now()}
  */
 import { useEffect, useCallback, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
+// Runtime version check - confirms fresh bundle is loaded
+const HOOK_BUILD_ID = 'v3_' + Math.random().toString(36).slice(2, 8);
+if (typeof window !== 'undefined') {
+  console.debug(`[useUnsavedChanges] Loaded: ${HOOK_BUILD_ID}`);
+}
+
 /**
  * Hook to track and warn about unsaved changes
- * Works with BrowserRouter (no data router required)
+ * Works with BrowserRouter - NO data router required
+ * Does NOT use useBlocker
  */
-export const useUnsavedChanges = (hasChanges: boolean) => {
+export function useUnsavedChanges(hasChanges: boolean) {
   const navigate = useNavigate();
   const location = useLocation();
   const [pendingPath, setPendingPath] = useState<string | null>(null);
   const hasChangesRef = useRef(hasChanges);
+
+  // Log on first render for debugging
+  useEffect(() => {
+    console.debug(`[useUnsavedChanges] Mounted with hasChanges=${hasChanges}, build=${HOOK_BUILD_ID}`);
+  }, []);
 
   // Keep ref in sync
   useEffect(() => {
@@ -41,7 +53,7 @@ export const useUnsavedChanges = (hasChanges: boolean) => {
     const originalPushState = window.history.pushState.bind(window.history);
     const originalReplaceState = window.history.replaceState.bind(window.history);
 
-    const interceptNavigation = (url: string | URL | null | undefined) => {
+    const interceptNavigation = (url: string | URL | null | undefined): boolean => {
       if (!hasChangesRef.current) return false;
       
       const targetPath = typeof url === 'string' ? url : url?.toString() || '';
@@ -107,16 +119,16 @@ export const useUnsavedChanges = (hasChanges: boolean) => {
     confirmNavigation,
     cancelNavigation,
   };
-};
+}
 
 /**
  * Hook to track form dirty state
  * Compare initial values with current values
  */
-export const useFormDirtyState = <T extends Record<string, unknown>>(
+export function useFormDirtyState<T extends Record<string, unknown>>(
   initialValues: T,
   currentValues: T
-): boolean => {
+): boolean {
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
@@ -127,6 +139,6 @@ export const useFormDirtyState = <T extends Record<string, unknown>>(
   }, [initialValues, currentValues]);
 
   return isDirty;
-};
+}
 
 export default useUnsavedChanges;
