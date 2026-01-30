@@ -65,7 +65,7 @@ const RugForm: React.FC<RugFormProps> = ({ onSubmit, isLoading, rugIndex }) => {
   const isDirty = formData.rugType !== '' || formData.notes !== '' || photos.length > 0;
 
   // Handle unsaved changes warning
-  const { blocker, isBlocked } = useUnsavedChanges(isDirty);
+  const { isBlocked, confirmNavigation, cancelNavigation } = useUnsavedChanges(isDirty);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -237,8 +237,8 @@ const RugForm: React.FC<RugFormProps> = ({ onSubmit, isLoading, rugIndex }) => {
       {/* Unsaved Changes Dialog */}
       <UnsavedChangesDialog
         open={isBlocked}
-        onConfirm={() => blocker.proceed?.()}
-        onCancel={() => blocker.reset?.()}
+        onConfirm={confirmNavigation}
+        onCancel={cancelNavigation}
       />
     </form>
   );

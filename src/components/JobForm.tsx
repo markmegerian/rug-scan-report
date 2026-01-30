@@ -46,7 +46,7 @@ const JobForm: React.FC<JobFormProps> = ({ onSubmit, isLoading, initialData, mod
   const isDirty = JSON.stringify(formData) !== JSON.stringify(initialValues);
 
   // Handle unsaved changes warning
-  const { blocker, isBlocked } = useUnsavedChanges(isDirty);
+  const { isBlocked, confirmNavigation, cancelNavigation } = useUnsavedChanges(isDirty);
 
   useEffect(() => {
     if (initialData) {
@@ -208,8 +208,8 @@ const JobForm: React.FC<JobFormProps> = ({ onSubmit, isLoading, initialData, mod
       {/* Unsaved Changes Dialog */}
       <UnsavedChangesDialog
         open={isBlocked}
-        onConfirm={() => blocker.proceed?.()}
-        onCancel={() => blocker.reset?.()}
+        onConfirm={confirmNavigation}
+        onCancel={cancelNavigation}
       />
     </form>
   );
