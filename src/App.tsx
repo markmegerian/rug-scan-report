@@ -66,8 +66,8 @@ const App = () => (
               <Toaster />
               <Sonner />
               <OfflineBanner />
-              <GlobalSearch />
               <BrowserRouter>
+                <GlobalSearch />
                 <Suspense fallback={<PageLoader />}>
                   <Routes>
                     <Route path="/" element={<Index />} />
