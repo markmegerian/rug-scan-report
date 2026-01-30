@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import TeachAIDialog from './TeachAIDialog';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
+import UnsavedChangesDialog from './UnsavedChangesDialog';
 import {
   Select,
   SelectContent,
@@ -77,6 +79,12 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
   
   // Track original AI-parsed values for comparison
   const originalServicesRef = useRef<ServiceItem[]>([]);
+  
+  // Track if services have been modified for unsaved changes warning
+  const [hasModifications, setHasModifications] = useState(false);
+  
+  // Handle unsaved changes warning
+  const { isBlocked, confirmNavigation, cancelNavigation } = useUnsavedChanges(hasModifications);
 
   // Load existing approved estimate or parse from report
   useEffect(() => {
@@ -285,6 +293,9 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
         return updated;
       })
     );
+    
+    // Mark as modified
+    setHasModifications(true);
   };
 
   const handleAddService = () => {
@@ -297,11 +308,13 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
     };
     setServices(prev => [...prev, newService]);
     setEditingId(newService.id);
+    setHasModifications(true);
   };
 
   const handleRemoveService = (id: string) => {
     setServices(prev => prev.filter(s => s.id !== id));
     if (editingId === id) setEditingId(null);
+    setHasModifications(true);
   };
 
   const calculateTotal = () => {
@@ -368,6 +381,9 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
         .eq('id', inspectionId);
       
       if (updateInspectionError) throw updateInspectionError;
+      
+      // Clear modification tracking after successful save
+      setHasModifications(false);
       
       toast.success('Estimate approved and saved!');
       onApprove(services, total);
@@ -648,6 +664,13 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
         originalPrice={pendingFeedback?.originalPrice}
         correctedServiceName={pendingFeedback?.correctedService}
         correctedPrice={pendingFeedback?.correctedPrice}
+      />
+
+      {/* Unsaved Changes Dialog */}
+      <UnsavedChangesDialog
+        open={isBlocked}
+        onConfirm={confirmNavigation}
+        onCancel={cancelNavigation}
       />
     </div>
   );

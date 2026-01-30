@@ -18,6 +18,8 @@ import PaymentInfoSettings from "@/components/PaymentInfoSettings";
 import { useSignedUrl } from "@/hooks/useSignedUrl";
 import DarkModeToggle from "@/components/DarkModeToggle";
 import DeleteAccountDialog from "@/components/DeleteAccountDialog";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import UnsavedChangesDialog from "@/components/UnsavedChangesDialog";
 
 interface Profile {
   id: string;
@@ -57,6 +59,15 @@ const AccountSettings = () => {
     business_email: "",
   });
 
+  // Track initial form values for dirty state detection
+  const [initialFormData, setInitialFormData] = useState({
+    full_name: "",
+    business_name: "",
+    business_address: "",
+    business_phone: "",
+    business_email: "",
+  });
+
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
     newPassword: "",
@@ -72,6 +83,12 @@ const AccountSettings = () => {
 
   // Use the signed URL hook for logo display
   const { signedUrl: logoSignedUrl } = useSignedUrl(profile?.logo_path);
+
+  // Check if form has unsaved changes
+  const isDirty = JSON.stringify(formData) !== JSON.stringify(initialFormData);
+  
+  // Handle unsaved changes warning
+  const { isBlocked, confirmNavigation, cancelNavigation } = useUnsavedChanges(isDirty);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -99,13 +116,15 @@ const AccountSettings = () => {
 
       if (data) {
         setProfile(data as unknown as Profile);
-        setFormData({
+        const loadedFormData = {
           full_name: data.full_name || "",
           business_name: data.business_name || "",
           business_address: data.business_address || "",
           business_phone: data.business_phone || "",
           business_email: data.business_email || "",
-        });
+        };
+        setFormData(loadedFormData);
+        setInitialFormData(loadedFormData);
         
         // Load notification preferences from database
         if (data.notification_preferences) {
@@ -198,6 +217,8 @@ const AccountSettings = () => {
 
       if (error) throw error;
 
+      // Update initial values to match saved data (clears dirty state)
+      setInitialFormData(formData);
       toast.success("Settings saved successfully");
     } catch (error) {
       console.error("Error saving settings:", error);
@@ -688,6 +709,13 @@ const AccountSettings = () => {
           </div>
         </div>
       </div>
+
+      {/* Unsaved Changes Dialog */}
+      <UnsavedChangesDialog
+        open={isBlocked}
+        onConfirm={confirmNavigation}
+        onCancel={cancelNavigation}
+      />
     </div>
   );
 };
