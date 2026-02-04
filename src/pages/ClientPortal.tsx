@@ -223,9 +223,9 @@ const ClientPortal = () => {
         setBranding(brandingData);
       }
 
-      // Fetch rugs for this job
+      // Fetch rugs for this job using the client view (excludes sensitive contact info)
       const { data: rugsData, error: rugsError } = await supabase
-        .from('inspections')
+        .from('inspections_client_view')
         .select(`
           id,
           rug_number,

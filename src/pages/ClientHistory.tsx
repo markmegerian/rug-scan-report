@@ -128,9 +128,9 @@ const ClientHistory = () => {
               }
             }
 
-            // Get rugs
+            // Get rugs using the client view (excludes sensitive contact info)
             const { data: rugsData } = await supabase
-              .from('inspections')
+              .from('inspections_client_view')
               .select('id, rug_number, rug_type, length, width, photo_urls, analysis_report')
               .eq('job_id', job.id);
 

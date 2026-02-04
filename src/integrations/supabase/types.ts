@@ -104,6 +104,13 @@ export type Database = {
             referencedRelation: "inspections"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "ai_analysis_feedback_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections_client_view"
+            referencedColumns: ["id"]
+          },
         ]
       }
       approved_estimates: {
@@ -146,6 +153,13 @@ export type Database = {
             columns: ["inspection_id"]
             isOneToOne: true
             referencedRelation: "inspections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approved_estimates_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: true
+            referencedRelation: "inspections_client_view"
             referencedColumns: ["id"]
           },
           {
@@ -811,7 +825,59 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      inspections_client_view: {
+        Row: {
+          analysis_report: string | null
+          created_at: string | null
+          estimate_approved: boolean | null
+          id: string | null
+          image_annotations: Json | null
+          job_id: string | null
+          length: number | null
+          notes: string | null
+          photo_urls: string[] | null
+          rug_number: string | null
+          rug_type: string | null
+          width: number | null
+        }
+        Insert: {
+          analysis_report?: string | null
+          created_at?: string | null
+          estimate_approved?: boolean | null
+          id?: string | null
+          image_annotations?: Json | null
+          job_id?: string | null
+          length?: number | null
+          notes?: string | null
+          photo_urls?: string[] | null
+          rug_number?: string | null
+          rug_type?: string | null
+          width?: number | null
+        }
+        Update: {
+          analysis_report?: string | null
+          created_at?: string | null
+          estimate_approved?: boolean | null
+          id?: string | null
+          image_annotations?: Json | null
+          job_id?: string | null
+          length?: number | null
+          notes?: string | null
+          photo_urls?: string[] | null
+          rug_number?: string | null
+          rug_type?: string | null
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspections_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       client_has_job_access: {
