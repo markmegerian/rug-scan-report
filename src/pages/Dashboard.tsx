@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Calendar, Briefcase, Eye, Plus, LogOut, ChevronRight, PlayCircle, Clock, CheckCircle, Settings, History, BarChart3, DollarSign, Shield, Moon, Sun } from 'lucide-react';
+import { Search, Calendar, Briefcase, Eye, Plus, LogOut, ChevronRight, PlayCircle, Clock, CheckCircle, Settings, History, BarChart3, DollarSign, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,7 +15,6 @@ import rugboostLogo from '@/assets/rugboost-logo.svg';
 import NotificationBell from '@/components/NotificationBell';
 import { DashboardSkeleton, DashboardJobTableSkeleton } from '@/components/skeletons/DashboardSkeleton';
 import MobileNav from '@/components/MobileNav';
-import { useTheme } from 'next-themes';
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -42,7 +41,6 @@ const Dashboard = () => {
   const { user, loading: authLoading, signOut } = useAuth();
   const { isAdmin } = useAdminAuth();
   const { data: jobs = [], isLoading, isError } = useJobs();
-  const { theme, setTheme } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
@@ -123,15 +121,6 @@ const Dashboard = () => {
               </Button>
             )}
             <NotificationBell />
-            <Button 
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} 
-              variant="ghost" 
-              size="icon" 
-              className="hidden sm:flex"
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
             <Button onClick={() => navigate('/settings')} variant="ghost" size="icon" className="hidden sm:flex">
               <Settings className="h-4 w-4" />
             </Button>
