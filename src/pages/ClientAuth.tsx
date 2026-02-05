@@ -21,7 +21,7 @@ import {
 const emailSchema = z.string().email('Please enter a valid email address');
 // Enforce strong password requirements
 const passwordSchema = z.string()
-  .min(10, 'Password must be at least 10 characters')
+  .min(8, 'Password must be at least 8 characters')
   .regex(/[A-Z]/, 'Must contain uppercase letter')
   .regex(/[a-z]/, 'Must contain lowercase letter')
   .regex(/[0-9]/, 'Must contain number');
@@ -416,7 +416,7 @@ const ClientAuth = () => {
                     <p className="text-sm text-destructive">{errors.newPassword}</p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Minimum 10 characters with uppercase, lowercase, and number
+                    Minimum 8 characters with uppercase, lowercase, and number
                   </p>
                 </div>
 
