@@ -10,7 +10,6 @@ import { queryClient } from "@/lib/queryClient";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import OfflineBanner from "@/components/OfflineBanner";
 import GlobalSearch from "@/components/GlobalSearch";
-import { ThemeProvider } from "next-themes";
 
 // Lazy load pages for code splitting
 const Index = lazy(() => import("./pages/Index"));
@@ -58,7 +57,6 @@ const PageLoader = () => (
 
 const App = () => (
   <ErrorBoundary>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <AppInitializer>
@@ -114,7 +112,6 @@ const App = () => (
           </AppInitializer>
         </AuthProvider>
       </QueryClientProvider>
-    </ThemeProvider>
   </ErrorBoundary>
 );
 
