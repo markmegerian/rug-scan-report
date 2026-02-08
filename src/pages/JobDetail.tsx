@@ -16,6 +16,8 @@ import type { Json } from '@/integrations/supabase/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -132,6 +134,15 @@ const JobDetail = () => {
   const [showCompareDialog, setShowCompareDialog] = useState(false);
   const [generatingPortalLink, setGeneratingPortalLink] = useState(false);
   const [resendingInvite, setResendingInvite] = useState(false);
+  const [assignedTo, setAssignedTo] = useState('');
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({
+    'Photos captured': false,
+    'Estimate sent': false,
+    'Client approved': false,
+    'Cleaning started': false,
+    'Cleaning completed': false,
+    'Delivery scheduled': false,
+  });
   
   // Mutable state derived from query data
   const [localApprovedEstimates, setLocalApprovedEstimates] = useState<ApprovedEstimate[]>([]);
@@ -144,6 +155,27 @@ const JobDetail = () => {
       setLocalRugs(jobData.rugs);
     }
   }, [jobData]);
+
+  useEffect(() => {
+    if (!jobId) return;
+    const storageKey = `job-${jobId}-ops`;
+    const stored = window.localStorage.getItem(storageKey);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as { assignedTo?: string; checklist?: Record<string, boolean> };
+        if (parsed.assignedTo) setAssignedTo(parsed.assignedTo);
+        if (parsed.checklist) setChecklist(parsed.checklist);
+      } catch {
+        // ignore invalid storage
+      }
+    }
+  }, [jobId]);
+
+  useEffect(() => {
+    if (!jobId) return;
+    const storageKey = `job-${jobId}-ops`;
+    window.localStorage.setItem(storageKey, JSON.stringify({ assignedTo, checklist }));
+  }, [assignedTo, checklist, jobId]);
 
   // Derived data from React Query (with fallbacks for local state)
   const job = jobData?.job || null;
@@ -178,6 +210,10 @@ const JobDetail = () => {
   const fetchClientPortalLink = useCallback(() => {
     fetchJobDetails();
   }, [fetchJobDetails]);
+
+  const toggleChecklistItem = (label: string) => {
+    setChecklist((prev) => ({ ...prev, [label]: !prev[label] }));
+  };
 
   // All data fetching is now handled by useJobDetail hook with parallel fetches
   // Old manual fetch functions have been removed
@@ -848,6 +884,7 @@ const JobDetail = () => {
               inspectionId={selectedRug.id}
               jobId={jobId || ''}
               availableServices={servicePrices}
+              upsellServices={upsellServices}
               existingApprovedEstimate={approvedEstimates.find(ae => ae.inspection_id === selectedRug.id) || null}
               onBack={() => {
                 setShowEstimateReview(false);
@@ -1062,6 +1099,35 @@ const JobDetail = () => {
                 <p className="text-sm">{job.notes}</p>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-display text-xl">Operations checklist</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-3">
+              {Object.keys(checklist).map((item) => (
+                <label key={item} className="flex items-center gap-3 text-sm">
+                  <Checkbox checked={checklist[item]} onCheckedChange={() => toggleChecklistItem(item)} />
+                  <span className={checklist[item] ? 'text-foreground' : 'text-muted-foreground'}>
+                    {item}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Assigned staff</p>
+              <Input
+                placeholder="Assign to team member"
+                value={assignedTo}
+                onChange={(event) => setAssignedTo(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Use this field to coordinate ownership and accountability.
+              </p>
+            </div>
           </CardContent>
         </Card>
 
