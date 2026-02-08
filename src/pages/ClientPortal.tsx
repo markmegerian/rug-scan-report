@@ -2,17 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Loader2, CheckCircle, Image, FileText, DollarSign, 
-  ChevronDown, ChevronUp, Check, X, CreditCard, LogOut, History, Lock,
-  Calendar, Bell, MessageSquare, Download, Star
+  ChevronDown, ChevronUp, Check, X, CreditCard, LogOut, History, Lock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -23,7 +19,6 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { usePushToken } from '@/hooks/usePushToken';
 import rugboostLogo from '@/assets/rugboost-logo.svg';
 import RugPhoto from '@/components/RugPhoto';
 
@@ -61,8 +56,6 @@ interface JobData {
   job_number: string;
   client_name: string;
   status: string;
-  created_at?: string | null;
-  client_approved_at?: string | null;
 }
 
 interface BusinessBranding {
@@ -71,39 +64,20 @@ interface BusinessBranding {
   business_email: string | null;
 }
 
-interface Payment {
-  id: string;
-  status: string;
-  amount: number;
-  currency: string;
-  created_at: string;
-  paid_at: string | null;
-}
-
 const ClientPortal = () => {
   const { accessToken } = useParams<{ accessToken: string }>();
   const navigate = useNavigate();
   const { user, loading: authLoading, signOut } = useAuth();
-  const { registerAndSaveToken, removePushToken, pushToken } = usePushToken();
 
   const [loading, setLoading] = useState(true);
   const [job, setJob] = useState<JobData | null>(null);
   const [rugs, setRugs] = useState<RugData[]>([]);
   const [branding, setBranding] = useState<BusinessBranding | null>(null);
-  const [payments, setPayments] = useState<Payment[]>([]);
   const [selectedServices, setSelectedServices] = useState<Map<string, Set<string>>>(new Map());
   const [expandedRugs, setExpandedRugs] = useState<Set<string>>(new Set());
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const [clientJobAccessId, setClientJobAccessId] = useState<string | null>(null);
-  const [scheduleRequest, setScheduleRequest] = useState({
-    date: '',
-    time: '',
-    notes: '',
-  });
-  const [question, setQuestion] = useState('');
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [reviewSubmitted, setReviewSubmitted] = useState(false);
 
   useEffect(() => {
     if (!authLoading) {
@@ -121,25 +95,6 @@ const ClientPortal = () => {
       }
     }
   }, [user, authLoading, accessToken]);
-
-  useEffect(() => {
-    if (!job?.id) return;
-    const scheduleKey = `client-portal-${job.id}-schedule`;
-    const notificationsKey = `client-portal-${job.id}-notifications`;
-    const reviewKey = `client-portal-${job.id}-review`;
-
-    const storedSchedule = window.localStorage.getItem(scheduleKey);
-    if (storedSchedule) {
-      try {
-        setScheduleRequest(JSON.parse(storedSchedule));
-      } catch {
-        // ignore invalid storage
-      }
-    }
-
-    setNotificationsEnabled(window.localStorage.getItem(notificationsKey) === 'true');
-    setReviewSubmitted(window.localStorage.getItem(reviewKey) === 'true');
-  }, [job?.id]);
 
   const fetchBrandingForPasswordSetup = async () => {
     try {
@@ -254,26 +209,8 @@ const ClientPortal = () => {
       setHasAccess(true);
       setClientJobAccessId(accessData.id);
 
-      const { data: jobDetails } = await supabase
-        .from('jobs')
-        .select('created_at, client_approved_at, status')
-        .eq('id', accessData.job_id)
-        .maybeSingle();
-
-      const { data: paymentsData } = await supabase
-        .from('payments')
-        .select('id, status, amount, currency, created_at, paid_at')
-        .eq('job_id', accessData.job_id)
-        .order('created_at', { ascending: false });
-
-      setPayments((paymentsData || []) as Payment[]);
-
       const jobData = accessData.jobs as unknown as JobData;
-      setJob({
-        ...jobData,
-        created_at: jobDetails?.created_at || null,
-        client_approved_at: jobDetails?.client_approved_at || null,
-      });
+      setJob(jobData);
 
       // Fetch branding
       const { data: brandingData } = await supabase
@@ -419,7 +356,7 @@ const ClientPortal = () => {
     return count;
   };
 
-  const handleProceedToPayment = async (paymentOption?: { label: string; multiplier?: number }) => {
+  const handleProceedToPayment = async () => {
     const selectedCount = getSelectedServicesCount();
     if (selectedCount === 0) {
       toast.error('Please select at least one service');
@@ -450,8 +387,6 @@ const ClientPortal = () => {
       });
 
       const total = calculateSelectedTotal();
-      const multiplier = paymentOption?.multiplier ?? 1;
-      const totalAmount = Number((total * multiplier).toFixed(2));
 
       // Save client service selections to database before checkout
       for (const rugSelection of servicesForCheckout) {
@@ -495,11 +430,10 @@ const ClientPortal = () => {
           jobId: job?.id,
           clientJobAccessId,
           selectedServices: servicesForCheckout,
-          totalAmount,
+          totalAmount: total,
           customerEmail: user?.email,
           successUrl: `${window.location.origin}/client/payment-success?session_id={CHECKOUT_SESSION_ID}`,
           cancelUrl: window.location.href,
-          paymentLabel: paymentOption?.label || 'Full payment',
         },
       });
 
@@ -519,94 +453,6 @@ const ClientPortal = () => {
       setIsProcessingPayment(false);
     }
   };
-
-  const handleScheduleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!job?.id) return;
-    const scheduleKey = `client-portal-${job.id}-schedule`;
-    window.localStorage.setItem(scheduleKey, JSON.stringify(scheduleRequest));
-    toast.success('Schedule request submitted. We’ll confirm shortly.');
-  };
-
-  const handleQuestionSubmit = () => {
-    if (!question.trim()) {
-      toast.error('Please enter your question.');
-      return;
-    }
-    toast.success('Question sent. We’ll follow up soon.');
-    setQuestion('');
-  };
-
-  const handleNotificationsToggle = async (enabled: boolean) => {
-    if (!job?.id) return;
-    const notificationsKey = `client-portal-${job.id}-notifications`;
-    setNotificationsEnabled(enabled);
-    window.localStorage.setItem(notificationsKey, String(enabled));
-
-    if (enabled) {
-      try {
-        await registerAndSaveToken();
-        toast.success('Notifications enabled.');
-      } catch (error) {
-        console.error('Notification enable error:', error);
-        toast.error('Unable to enable notifications.');
-      }
-    } else if (pushToken) {
-      await removePushToken();
-      toast.success('Notifications disabled.');
-    }
-  };
-
-  const handleReviewSubmit = () => {
-    if (!job?.id) return;
-    const reviewKey = `client-portal-${job.id}-review`;
-    window.localStorage.setItem(reviewKey, 'true');
-    setReviewSubmitted(true);
-  };
-
-  const handleDownloadReport = (rug: RugData) => {
-    if (!rug.analysis_report) return;
-    const blob = new Blob([rug.analysis_report], { type: 'text/plain;charset=utf-8' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${rug.rug_number}-report.txt`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-  };
-
-  const timelineSteps = [
-    {
-      label: 'Job created',
-      date: job?.created_at,
-      done: !!job?.created_at,
-    },
-    {
-      label: 'Estimate approved',
-      date: job?.client_approved_at || null,
-      done: !!job?.client_approved_at,
-    },
-    {
-      label: 'Payment received',
-      date: payments.find((payment) => payment.status === 'completed')?.paid_at || null,
-      done: payments.some((payment) => payment.status === 'completed'),
-    },
-    {
-      label: 'Cleaning completed',
-      date: job?.status === 'completed' ? new Date().toISOString() : null,
-      done: job?.status === 'completed',
-    },
-  ];
-
-  const beforeAfterPairs = rugs
-    .filter((rug) => (rug.photo_urls || []).length >= 2)
-    .map((rug) => ({
-      rugNumber: rug.rug_number,
-      before: rug.photo_urls?.[0] || '',
-      after: rug.photo_urls?.[rug.photo_urls.length - 1] || '',
-    }));
 
   const handleSignOut = async () => {
     await signOut();
@@ -779,86 +625,6 @@ const ClientPortal = () => {
               Review the recommended services below and select the ones you'd like to proceed with.
               You can deselect any services you don't need.
             </p>
-          </CardContent>
-        </Card>
-
-        <div className="grid lg:grid-cols-3 gap-6 mb-6">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5 text-primary" />
-                Job timeline
-              </CardTitle>
-              <CardDescription>Track progress from intake to completion.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {timelineSteps.map((step) => (
-                <div key={step.label} className="flex items-start gap-3">
-                  <div className={`mt-1 h-2.5 w-2.5 rounded-full ${step.done ? 'bg-primary' : 'bg-muted'}`} />
-                  <div>
-                    <p className="text-sm font-medium">{step.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {step.date ? new Date(step.date).toLocaleString() : 'Pending'}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="h-5 w-5 text-primary" />
-                Notifications
-              </CardTitle>
-              <CardDescription>Stay updated on status changes.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium">Enable updates</p>
-                  <p className="text-xs text-muted-foreground">Email or push notifications</p>
-                </div>
-                <Switch checked={notificationsEnabled} onCheckedChange={handleNotificationsToggle} />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {notificationsEnabled ? 'We’ll notify you when your job moves to the next step.' : 'Notifications are currently off.'}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-primary" />
-              Schedule pickup or delivery
-            </CardTitle>
-            <CardDescription>Request a time window that works for you.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-3 md:grid-cols-3" onSubmit={handleScheduleSubmit}>
-              <Input
-                type="date"
-                value={scheduleRequest.date}
-                onChange={(event) => setScheduleRequest((prev) => ({ ...prev, date: event.target.value }))}
-              />
-              <Input
-                type="time"
-                value={scheduleRequest.time}
-                onChange={(event) => setScheduleRequest((prev) => ({ ...prev, time: event.target.value }))}
-              />
-              <Button type="submit" className="w-full">
-                Submit request
-              </Button>
-              <Textarea
-                className="md:col-span-3"
-                placeholder="Add any pickup or delivery notes..."
-                value={scheduleRequest.notes}
-                onChange={(event) => setScheduleRequest((prev) => ({ ...prev, notes: event.target.value }))}
-              />
-            </form>
           </CardContent>
         </Card>
 
@@ -1047,17 +813,6 @@ const ClientPortal = () => {
                           <TabsContent value="report">
                             {rug.analysis_report ? (
                               <div className="prose prose-sm max-w-none dark:prose-invert">
-                                <div className="flex justify-end">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="mb-2 gap-1"
-                                    onClick={() => handleDownloadReport(rug)}
-                                  >
-                                    <Download className="h-3 w-3" />
-                                    Download report
-                                  </Button>
-                                </div>
                                 <pre className="whitespace-pre-wrap text-sm bg-muted p-4 rounded-lg overflow-auto max-h-96">
                                   {rug.analysis_report}
                                 </pre>
@@ -1122,157 +877,30 @@ const ClientPortal = () => {
                   <span className="text-primary">${totalSelected.toFixed(2)}</span>
                 </div>
 
-                <div className="space-y-2">
-                  <Button
-                    className="w-full gap-2"
-                    size="lg"
-                    onClick={() => handleProceedToPayment({ label: 'Full payment', multiplier: 1 })}
-                    disabled={isProcessingPayment || selectedCount === 0}
-                  >
-                    {isProcessingPayment ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="h-4 w-4" />
-                        Pay in full
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    className="w-full gap-2"
-                    size="lg"
-                    variant="outline"
-                    onClick={() => handleProceedToPayment({ label: 'Deposit', multiplier: 0.5 })}
-                    disabled={isProcessingPayment || selectedCount === 0}
-                  >
-                    <CreditCard className="h-4 w-4" />
-                    Pay 50% deposit
-                  </Button>
-                </div>
+                <Button
+                  className="w-full gap-2"
+                  size="lg"
+                  onClick={handleProceedToPayment}
+                  disabled={isProcessingPayment || selectedCount === 0}
+                >
+                  {isProcessingPayment ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="h-4 w-4" />
+                      Proceed to Payment
+                    </>
+                  )}
+                </Button>
 
                 <p className="text-xs text-center text-muted-foreground">
                   Secure payment powered by Stripe
                 </p>
               </CardContent>
             </Card>
-
-            {beforeAfterPairs.length > 0 && (
-              <Card className="mt-4">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Image className="h-5 w-5 text-primary" />
-                    Before & after
-                  </CardTitle>
-                  <CardDescription>See the transformation for your rug.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {beforeAfterPairs.slice(0, 1).map((pair) => (
-                    <div key={pair.rugNumber} className="space-y-2">
-                      <p className="text-sm font-medium">{pair.rugNumber}</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <RugPhoto
-                          filePath={pair.before}
-                          alt={`${pair.rugNumber} before`}
-                          className="w-full h-28 object-cover rounded-lg border"
-                          loadingClassName="w-full h-28"
-                        />
-                        <RugPhoto
-                          filePath={pair.after}
-                          alt={`${pair.rugNumber} after`}
-                          className="w-full h-28 object-cover rounded-lg border"
-                          loadingClassName="w-full h-28"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-            <Card className="mt-4">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Download className="h-5 w-5 text-primary" />
-                  Invoices & receipts
-                </CardTitle>
-                <CardDescription>Access payment records for your job.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {payments.length === 0 ? (
-                  <p className="text-muted-foreground">No payments yet.</p>
-                ) : (
-                  payments.map((payment) => (
-                    <div key={payment.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                      <div>
-                        <p className="font-medium">
-                          {payment.status === 'completed' ? 'Paid' : 'Pending'} • ${payment.amount.toFixed(2)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(payment.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <Button size="sm" variant="outline" onClick={() => toast('Receipt will be emailed shortly.')}>
-                        Email receipt
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="mt-4">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-primary" />
-                  Ask a question
-                </CardTitle>
-                <CardDescription>Need help or changes? Send us a message.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Textarea
-                  placeholder="Type your question here..."
-                  value={question}
-                  onChange={(event) => setQuestion(event.target.value)}
-                />
-                <Button onClick={handleQuestionSubmit} className="w-full">
-                  Send question
-                </Button>
-              </CardContent>
-            </Card>
-
-            {job.status === 'completed' && (
-              <Card className="mt-4">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Star className="h-5 w-5 text-primary" />
-                    Share your experience
-                  </CardTitle>
-                  <CardDescription>Help others by leaving a review.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Your feedback helps us improve and helps neighbors find trusted service.
-                  </p>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      handleReviewSubmit();
-                      window.open(
-                        `https://www.google.com/search?q=${encodeURIComponent(branding?.business_name || 'Rug cleaning')}+reviews`,
-                        '_blank'
-                      );
-                    }}
-                    className="w-full"
-                    disabled={reviewSubmitted}
-                  >
-                    {reviewSubmitted ? 'Thanks for reviewing!' : 'Leave a review'}
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
           </div>
         </div>
 

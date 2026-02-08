@@ -148,22 +148,6 @@ const AccountsReceivable = () => {
     ? Math.round((payments.filter(p => p.status === 'completed').length / payments.length) * 100) 
     : 0;
 
-  const agingBuckets = payments
-    .filter(p => p.status === 'pending')
-    .reduce(
-      (acc, payment) => {
-        const ageDays = Math.floor(
-          (Date.now() - new Date(payment.created_at).getTime()) / (1000 * 60 * 60 * 24)
-        );
-        if (ageDays <= 30) acc['0-30'] += payment.amount;
-        else if (ageDays <= 60) acc['31-60'] += payment.amount;
-        else if (ageDays <= 90) acc['61-90'] += payment.amount;
-        else acc['90+'] += payment.amount;
-        return acc;
-      },
-      { '0-30': 0, '31-60': 0, '61-90': 0, '90+': 0 }
-    );
-
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -245,24 +229,6 @@ const AccountsReceivable = () => {
             </CardContent>
           </Card>
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4 text-primary" />
-              A/R Aging
-            </CardTitle>
-            <CardDescription>Outstanding balances by age</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Object.entries(agingBuckets).map(([bucket, amount]) => (
-              <div key={bucket} className="rounded-lg border border-border p-3">
-                <p className="text-xs text-muted-foreground">{bucket} days</p>
-                <p className="text-lg font-semibold">${amount.toFixed(2)}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
 
         {/* Payments Table */}
         <Card>

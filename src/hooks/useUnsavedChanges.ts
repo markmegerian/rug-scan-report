@@ -1,73 +1,31 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+/**
+ * useUnsavedChanges Hook
+ * TEMPORARILY DISABLED - returning no-op to avoid confusion during job creation flow
+ * TODO: Re-enable once navigation blocking is properly integrated
+ */
 
 /**
- * Hook to track and warn about unsaved changes.
- * Uses beforeunload and a lightweight history guard to prevent accidental loss.
+ * Hook to track and warn about unsaved changes
+ * Currently disabled - returns no-op values
  */
-export function useUnsavedChanges(hasChanges: boolean) {
-  const navigate = useNavigate();
-  const [isBlocked, setIsBlocked] = useState(false);
-  const [pendingPath, setPendingPath] = useState<string | null>(null);
-  const currentPathRef = useRef<string>(window.location.pathname);
-
-  useEffect(() => {
-    currentPathRef.current = window.location.pathname;
-  });
-
-  useEffect(() => {
-    if (!hasChanges) return;
-
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-
-    const handlePopState = () => {
-      if (!hasChanges) return;
-      setIsBlocked(true);
-      setPendingPath(window.location.pathname);
-      window.history.pushState(null, '', currentPathRef.current);
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('popstate', handlePopState);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, [hasChanges]);
-
-  const confirmNavigation = () => {
-    setIsBlocked(false);
-    if (pendingPath) {
-      navigate(pendingPath);
-    }
-    setPendingPath(null);
-  };
-
-  const cancelNavigation = () => {
-    setIsBlocked(false);
-    setPendingPath(null);
-  };
-
+export function useUnsavedChanges(_hasChanges: boolean) {
   return {
-    isBlocked,
-    pendingPath,
-    confirmNavigation,
-    cancelNavigation,
+    isBlocked: false,
+    pendingPath: null,
+    confirmNavigation: () => {},
+    cancelNavigation: () => {},
   };
 }
 
 /**
- * Hook to track form dirty state.
+ * Hook to track form dirty state
+ * Currently disabled - always returns false
  */
 export function useFormDirtyState<T extends Record<string, unknown>>(
-  initialValues: T,
-  currentValues: T
+  _initialValues: T,
+  _currentValues: T
 ): boolean {
-  return JSON.stringify(initialValues) !== JSON.stringify(currentValues);
+  return false;
 }
 
 export default useUnsavedChanges;
