@@ -42,6 +42,7 @@ interface EstimateReviewProps {
   onBack: () => void;
   onApprove: (services: ServiceItem[], totalCost: number) => void;
   availableServices?: { name: string; unitPrice: number }[];
+  upsellServices?: { name: string; unitPrice: number }[];
   existingApprovedEstimate?: {
     id: string;
     services: ServiceItem[];
@@ -63,6 +64,7 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
   onBack,
   onApprove,
   availableServices = [],
+  upsellServices = [],
   existingApprovedEstimate,
 }) => {
   const { user } = useAuth();
@@ -76,6 +78,10 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
     correctedService: string;
     correctedPrice: number;
   } | null>(null);
+
+  const upsellOptions = upsellServices.filter(
+    (service) => !services.some((existing) => existing.name === service.name)
+  );
   
   // Track original AI-parsed values for comparison
   const originalServicesRef = useRef<ServiceItem[]>([]);
@@ -311,6 +317,19 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
     setHasModifications(true);
   };
 
+  const handleAddUpsell = (service: { name: string; unitPrice: number }) => {
+    const newService: ServiceItem = {
+      id: crypto.randomUUID(),
+      name: service.name,
+      description: 'Optional add-on',
+      quantity: 1,
+      unitPrice: service.unitPrice,
+      priority: 'low',
+    };
+    setServices((prev) => [...prev, newService]);
+    setHasModifications(true);
+  };
+
   const handleRemoveService = (id: string) => {
     setServices(prev => prev.filter(s => s.id !== id));
     if (editingId === id) setEditingId(null);
@@ -457,6 +476,35 @@ const EstimateReview: React.FC<EstimateReviewProps> = ({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {upsellOptions.length > 0 && (
+            <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                <Lightbulb className="h-4 w-4" />
+                Recommended add-ons
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Add optional services to increase value and improve outcomes.
+              </p>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {upsellOptions.map((service) => (
+                  <div
+                    key={service.name}
+                    className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">{service.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        ${service.unitPrice.toFixed(2)}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => handleAddUpsell(service)}>
+                      Add
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {services.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <p>No services detected from the analysis.</p>

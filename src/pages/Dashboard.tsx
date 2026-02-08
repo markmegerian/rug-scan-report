@@ -180,6 +180,23 @@ const Dashboard = () => {
           {/* Jobs Table */}
           {isLoading ? (
             <DashboardJobTableSkeleton />
+          ) : isError ? (
+            <Card className="shadow-medium">
+              <CardHeader>
+                <CardTitle className="font-display text-lg flex items-center gap-2">
+                  <Briefcase className="h-5 w-5 text-primary" />
+                  Jobs
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>We couldn’t load your jobs right now.</p>
+                  <Button onClick={() => navigate(0)} className="mt-4">
+                    Retry
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           ) : (
             <Card className="shadow-medium">
               <CardHeader>
