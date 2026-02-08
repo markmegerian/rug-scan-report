@@ -248,6 +248,20 @@ const Analytics = () => {
     staleTime: 60000, // 1 minute for analytics
   });
 
+  const largestDrop = useMemo(() => {
+    if (!data?.funnelData || data.funnelData.length < 2) return null;
+    let maxDrop = { from: '', to: '', percent: 0 };
+    for (let i = 0; i < data.funnelData.length - 1; i += 1) {
+      const current = data.funnelData[i];
+      const next = data.funnelData[i + 1];
+      const drop = current.count > 0 ? ((current.count - next.count) / current.count) * 100 : 0;
+      if (drop > maxDrop.percent) {
+        maxDrop = { from: current.stage, to: next.stage, percent: drop };
+      }
+    }
+    return maxDrop;
+  }, [data]);
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -338,6 +352,27 @@ const Analytics = () => {
                 description="Invited to paid"
               />
             </div>
+
+            {largestDrop && (
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="h-5 w-5 text-primary" />
+                    Biggest funnel drop-off
+                  </CardTitle>
+                  <CardDescription>
+                    Identify the step causing the most friction.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    The largest drop is from <span className="font-medium text-foreground">{largestDrop.from}</span> to{' '}
+                    <span className="font-medium text-foreground">{largestDrop.to}</span> (
+                    {largestDrop.percent.toFixed(1)}%).
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Charts Row 1 */}
             <div className="grid gap-6 lg:grid-cols-2 mb-6">
