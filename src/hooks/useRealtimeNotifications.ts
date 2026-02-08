@@ -102,7 +102,7 @@ export const useRealtimeNotifications = () => {
           }
 
           // Invalidate notifications query
-          queryClient.invalidateQueries({ queryKey: ['notifications'] });
+          queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all });
         }
       )
       .subscribe();
