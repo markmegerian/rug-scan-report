@@ -17,7 +17,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { format, isThisYear, isThisMonth, isThisWeek, parseISO, addMonths } from 'date-fns';
+import { format, isThisYear, isThisMonth, isThisWeek, parseISO } from 'date-fns';
 import rugboostLogo from '@/assets/rugboost-logo.svg';
 import RugPhoto from '@/components/RugPhoto';
 
@@ -184,11 +184,6 @@ const ClientHistory = () => {
     });
   };
 
-  const latestJob = jobs
-    .slice()
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-  const nextRecommended = latestJob ? addMonths(parseISO(latestJob.created_at), 12) : null;
-
   // Group jobs into timeline periods
   const groupJobsByTime = (jobs: HistoryJob[]): TimelineGroup[] => {
     const groups: { [key: string]: HistoryJob[] } = {
@@ -266,29 +261,6 @@ const ClientHistory = () => {
               </CardDescription>
             </CardHeader>
           </Card>
-
-          {nextRecommended && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-primary" />
-                  Recommended next cleaning
-                </CardTitle>
-                <CardDescription>
-                  Based on your last completed service.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Your next recommended cleaning is around{' '}
-                  <span className="font-medium text-foreground">
-                    {format(nextRecommended, 'MMMM d, yyyy')}
-                  </span>
-                  .
-                </p>
-              </CardContent>
-            </Card>
-          )}
 
           {/* Timeline */}
           {loading ? (
